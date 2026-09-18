@@ -1,0 +1,23 @@
+华小安前端交付包
+交付日期：2026-08-12
+
+1. frontend-source
+   React + TypeScript + Vite 源码、资源、构建脚本和依赖锁文件。
+
+2. production-build
+   已通过 npm run build 生成的生产构建文件。
+
+3. standalone-html
+   华小安智能工作台完整.html
+   华小安独立工作台.html
+
+4. docs
+   华小安审计标注系统产品说明书.docx
+
+5. README.md
+   开发、构建、预览与后端接入说明。
+
+校验结果：
+- TypeScript 检查通过
+- Vite 生产构建通过
+

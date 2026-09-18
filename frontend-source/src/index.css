@@ -1,0 +1,310 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --color-brand: #0052d9;
+  --color-chat-bg: #f6f8ff;
+  --color-sidebar-bg: #f9fafc;
+  --color-ai-blue: #0052d9;
+  --color-avatar-blue: #00a3ff;
+  --color-surface-bright: #f9f9ff;
+  --color-outline-variant: #dfe2ed;
+
+  --color-primary: #003da6;
+  --color-primary-container: #0052d9;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #cbd6ff;
+
+  --color-secondary: #016c46;
+  --color-secondary-container: #9df5c4;
+  --color-on-secondary-container: #10734c;
+
+  --color-tertiary: #822600;
+  --color-tertiary-container: #aa3500;
+  --color-on-tertiary-container: #ffccbc;
+
+  --color-success-green: #006c46;
+  --color-warning-orange: #aa3500;
+  --color-error-red: #ba1a1a;
+
+  --color-glass-bg: rgba(255, 255, 255, 0.85);
+  --color-glass-border: rgba(229, 230, 235, 0.5);
+  --color-surface-bg: #f3f5f8;
+}
+
+/* Audit graph follows the same readable type scale as the main workbench sidebar. */
+.audit-graph-workspace button,
+.audit-graph-workspace input,
+.audit-graph-workspace p,
+.audit-graph-workspace span {
+  font-size: 13px !important;
+  line-height: 1.35;
+}
+
+.audit-graph-workspace h2 {
+  font-size: 14px !important;
+}
+
+.audit-graph-workspace .audit-sidebar-meta {
+  font-size: 10px !important;
+  line-height: 1.45;
+}
+
+.audit-project-dialog h3 {
+  font-size: 17px !important;
+  line-height: 1.35;
+}
+
+.audit-project-dialog h4 {
+  font-size: 13px !important;
+}
+
+.audit-project-dialog h3 + p {
+  font-size: 11px !important;
+  line-height: 1.55;
+}
+
+.audit-project-dialog label > span:first-child {
+  font-size: 12px !important;
+  color: #45566f;
+}
+
+.audit-project-dialog input,
+.audit-project-dialog select,
+.audit-project-dialog textarea {
+  min-height: 44px;
+  font-size: 13px !important;
+}
+
+.audit-project-dialog small {
+  font-size: 10px !important;
+  line-height: 1.5;
+}
+
+.audit-project-dialog footer button {
+  min-height: 42px;
+  font-size: 12px !important;
+}
+
+.audit-graph-workspace .audit-node-label {
+  font-size: 12px;
+}
+
+.audit-graph-workspace .audit-node-code {
+  font-size: 8px;
+  letter-spacing: 0.01em;
+}
+
+.audit-graph-workspace .audit-node-type {
+  font-size: 10px;
+}
+
+.audit-graph-workspace .audit-edge-label {
+  font-size: 9px;
+  paint-order: stroke;
+  stroke: #fcfdfe;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.audit-graph-workspace .audit-library-label {
+  font-size: 5.5px;
+  pointer-events: none;
+}
+
+.audit-graph-workspace .audit-library-code {
+  font-size: 4.8px;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+}
+
+.audit-graph-workspace .audit-cluster-title {
+  font-size: 12px;
+}
+
+.audit-graph-workspace .audit-cluster-note {
+  font-size: 8.5px;
+}
+
+.audit-graph-workspace .graph-toolbar button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f6f8ff;
+  color: #181c23;
+  overflow-x: hidden;
+}
+
+#nav-workbench:focus,
+#nav-workbench:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.project-table-columns {
+  grid-template-columns:
+    minmax(0, 1.55fr)
+    minmax(0, 0.9fr)
+    minmax(0, 0.7fr)
+    minmax(0, 0.65fr)
+    minmax(0, 3.8fr)
+    minmax(0, 0.55fr)
+    minmax(0, 0.42fr)
+    minmax(0, 0.75fr)
+    minmax(0, 0.5fr)
+    minmax(0, 0.75fr);
+}
+
+/* Custom Scrollbar */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #dfe2ed;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd6ff;
+}
+
+.visible-scrollbar {
+  scrollbar-gutter: stable;
+}
+
+.visible-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.visible-scrollbar::-webkit-scrollbar-track {
+  background: #f3f5fb;
+  border-radius: 10px;
+}
+
+.visible-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd3e6;
+  border-radius: 10px;
+  border: 2px solid #f3f5fb;
+}
+
+.visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9aa9d8;
+}
+
+/* Glassmorphism Cards */
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(229, 230, 235, 0.6);
+  box-shadow:
+    0 4px 12px -1px rgba(0, 0, 0, 0.03),
+    0 2px 4px -1px rgba(0, 0, 0, 0.02);
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 12px 24px -4px rgba(0, 82, 217, 0.05),
+    0 4px 12px -2px rgba(0, 82, 217, 0.03);
+  border-color: rgba(0, 82, 217, 0.15);
+}
+
+/* Workbench-style nav active */
+.nav-item-active {
+  background-color: #f1f3ff;
+  color: #0052d9;
+  border-radius: 0.5rem;
+}
+
+/* Paper texture effect */
+.paper-texture {
+  background-color: #f9f9ff;
+  background-image: radial-gradient(#e5e7eb 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+}
+
+/* Hero dashboard bg gradient */
+.hero-gradient {
+  background: linear-gradient(135deg, #f0f4ff 0%, #f6f0ff 100%);
+}
+
+.header-gradient {
+  background: linear-gradient(180deg, #f1f4ff 0%, #ffffff 100%);
+}
+
+.project-overview-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  min-height: 736px;
+  overflow: hidden;
+}
+
+.project-overview-grid > article {
+  height: 223px;
+}
+
+#downstream-audit-root table {
+  line-height: 1.45;
+}
+
+#downstream-audit-root th,
+#downstream-audit-root td {
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+#downstream-audit-root code,
+#downstream-audit-root time {
+  white-space: nowrap;
+}
+
+#downstream-audit-root button[class*="bg-[#1890ff]"],
+#downstream-audit-root button[class*="bg-[#315ca9]"] {
+  border: 1px solid #b9c9e3 !important;
+  background: #fff !important;
+  color: #315ca9 !important;
+  box-shadow: none !important;
+}
+
+#downstream-audit-root button[class*="bg-[#1890ff]"]:hover,
+#downstream-audit-root button[class*="bg-[#315ca9]"]:hover {
+  border-color: #8fa9d2 !important;
+  background: #f4f7fc !important;
+  color: #244f98 !important;
+}
+
+@media (min-width: 700px) {
+  .project-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .project-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
