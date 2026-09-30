@@ -1,0 +1,28 @@
+{
+  "web-search": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@brave/brave-search-mcp-server"],
+    "env": {"BRAVE_API_KEY": "${BRAVE_API_KEY}"},
+    "enabled": false
+  },
+  "github": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"},
+    "enabled": false
+  },
+  "filesystem": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+    "enabled": true
+  },
+  "database": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"],
+    "enabled": false
+  }
+}

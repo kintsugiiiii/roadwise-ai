@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   LogOut,
   MoreHorizontal,
-  MoreVertical
+  MoreVertical,
+  KeyRound,
 } from 'lucide-react';
 import { Project } from '../types';
 import { AgentSVGAvatar } from './AgentSVGAvatar';
@@ -68,7 +69,7 @@ interface SidebarPins {
   memberNames: string[];
 }
 
-const sidebarPinsStorageKey = 'huaxiaoan-sidebar-pins-v1';
+const sidebarPinsStorageKey = 'roadwise-sidebar-pins-v1';
 
 const readSidebarPins = (): SidebarPins => {
   if (typeof window === 'undefined') return { projectIds: [], memberNames: [] };
@@ -130,6 +131,12 @@ export default function Sidebar({
   const [memberSearch, setMemberSearch] = useState('');
   const [agentSearch, setAgentSearch] = useState('');
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsApiKey, setSettingsApiKey] = useState('');
+  const [settingsModel, setSettingsModel] = useState('deepseek-v4-flash');
+  const [settingsStatus, setSettingsStatus] = useState('');
+  const [agentConnected, setAgentConnected] = useState(() => localStorage.getItem('roadwise-agent-configured') === '1');
+  const [usage, setUsage] = useState({ requests: 0, totalTokensEstimated: 0 });
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState('');
   const [editingAgentSessionId, setEditingAgentSessionId] = useState<string | null>(null);
@@ -138,10 +145,10 @@ export default function Sidebar({
   const [sidebarPins, setSidebarPins] = useState<SidebarPins>(readSidebarPins);
 
   const agentKeywordMap: Record<string, string> = {
-    'agent-shebao': '社保 公积金 缴费 基数 审计 智能体会话',
-    'agent-人事': '行政 人事 合同 劳动合同 草稿 生成 审查 续签',
-    'agent-年报': '事业单位 年报 审计 报告 报表 底稿',
-    'agent-会计': '财务 助手 会计 合规 凭证 科目',
+    'agent-shebao': '材料 证据 访谈 风险 诊断 智能体会话',
+    'agent-人事': '团队 协作 SOP 流程 复盘',
+    'agent-年报': '阶段 任务 材料 评审 下一步',
+    'agent-会计': '数据 预算 假设 风险 分析',
   };
 
   const normalizedAgentSearch = agentSearch.trim().toLowerCase();
@@ -400,7 +407,7 @@ export default function Sidebar({
                   <span className="text-xs font-bold tracking-wide">项目协作</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] bg-gray-200/60 px-1.5 py-0.2 rounded-md font-semibold text-gray-500">
+                  <span className="hidden text-[10px] bg-gray-200/60 px-1.5 py-0.2 rounded-md font-semibold text-gray-500">
                     {projects.length}
                   </span>
                   {projectCollapse ? (
@@ -412,7 +419,7 @@ export default function Sidebar({
               </div>
 
               {/* Project Subfolder List */}
-              {!projectCollapse && (
+              {false && !projectCollapse && (
                 <div className="mt-1 pl-3.5">
                   {/* Project Search Bar */}
                   <div className="px-1.5 mb-2">
@@ -495,7 +502,7 @@ export default function Sidebar({
                   <span className="text-xs font-bold tracking-wide">单聊成员</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] bg-gray-200/60 px-1.5 py-0.2 rounded-md font-semibold text-gray-500">{chatMembers.length}</span>
+                  <span className="hidden text-[10px] bg-gray-200/60 px-1.5 py-0.2 rounded-md font-semibold text-gray-500">{chatMembers.length}</span>
                   {chatCollapse ? (
                     <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
                   ) : (
@@ -505,7 +512,7 @@ export default function Sidebar({
               </div>
 
               {/* Members List */}
-              {!chatCollapse && (
+              {false && !chatCollapse && (
                 <div className="mt-1 pl-2">
                   {/* Member Search Bar */}
                   <div className="px-1.5 mb-2">
@@ -703,6 +710,7 @@ export default function Sidebar({
             </div>
 
             {/* 2. 数字员工 Section */}
+            {false && (
             <div className="pt-2 space-y-0.5">
               <div 
                 className="flex items-center justify-between px-3.5 py-2 text-gray-500 hover:text-gray-800 rounded-lg cursor-pointer"
@@ -912,8 +920,10 @@ export default function Sidebar({
                 </div>
               )}
             </div>
+            )}
 
             {/* 3. 工具箱 Section */}
+            {false && (
             <div className="pt-2 space-y-0.5">
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-500 hover:text-gray-800 rounded-lg cursor-pointer">
                 <div className="flex items-center gap-3">
@@ -925,6 +935,7 @@ export default function Sidebar({
                 </div>
               </div>
             </div>
+            )}
           </>
         )}
       </nav>
@@ -974,12 +985,13 @@ export default function Sidebar({
                   <p className="text-[10px] text-gray-400 font-semibold truncate mt-1">huaan</p>
                 </div>
                 <span className="max-w-[78px] truncate rounded-md bg-gray-100 px-2 py-1 text-[9px] font-bold text-gray-500">
-                  report_third_r...
+                  {agentConnected ? 'Agent 已连接' : 'Agent 未连接'}
                 </span>
               </div>
               <div className="py-1.5">
                 {[
                   { label: '设置', icon: Settings },
+                  { label: 'API Key 配置', icon: KeyRound },
                   { label: '更换头像', icon: ImagePlus },
                   { label: '账号安全', icon: ShieldCheck },
                   { label: '退出登录', icon: LogOut },
@@ -989,7 +1001,25 @@ export default function Sidebar({
                     <button
                       key={item.label}
                       type="button"
-                      onClick={() => setProfileMenuOpen(false)}
+                      onClick={async () => {
+                        setProfileMenuOpen(false);
+                        if (item.label !== 'API Key 配置') return;
+                        setSettingsOpen(true);
+                        setSettingsStatus('读取配置中…');
+                        try {
+                          const [configResponse, usageResponse] = await Promise.all([
+                            fetch('http://127.0.0.1:4000/api/project-agent/config'),
+                            fetch('http://127.0.0.1:4000/api/project-agent/usage'),
+                          ]);
+                          const config = await configResponse.json();
+                          const currentUsage = await usageResponse.json();
+                          setSettingsModel(config.model || 'deepseek-v4-flash');
+                          setUsage({ requests: currentUsage.requests || 0, totalTokensEstimated: currentUsage.totalTokensEstimated || 0 });
+                          setSettingsStatus(config.configured ? '后端已连接，API Key 已配置' : '尚未配置 API Key');
+                        } catch {
+                          setSettingsStatus('无法连接后端，请先启动 Python Agent 服务');
+                        }
+                      }}
                       className="w-full px-3 py-2.5 flex items-center gap-3 text-xs font-bold text-gray-700 hover:bg-[#f5f2fc] transition-colors text-left"
                     >
                       <Icon className="w-4 h-4 text-gray-600" />
@@ -1018,6 +1048,42 @@ export default function Sidebar({
             <p className="text-[10px] text-gray-400 font-semibold truncate mt-1">huaan</p>
           </div>
         </button>
+        {settingsOpen && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/20 p-6" onClick={() => setSettingsOpen(false)}>
+            <div className="w-[420px] rounded-2xl border border-white bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-black text-[#253858]">API Key 配置</h2>
+                <button type="button" onClick={() => setSettingsOpen(false)} className="text-xl text-gray-400">×</button>
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-gray-500">API Key 只发送给本机后端服务使用，不会写入前端代码或后端代码。</p>
+              <label className="mt-5 block text-xs font-bold text-gray-600">DeepSeek API Key</label>
+              <input type="password" value={settingsApiKey} onChange={(event) => setSettingsApiKey(event.target.value)} placeholder="sk-..." className="mt-2 h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400" />
+              <label className="mt-4 block text-xs font-bold text-gray-600">Agent 底层模型</label>
+              <select value={settingsModel} onChange={(event) => setSettingsModel(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400">
+                <option value="deepseek-v4-flash">DeepSeek V4 Flash（推荐）</option>
+                <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
+              </select>
+              <div className="mt-4 rounded-xl bg-[#f5f7fb] p-3 text-xs text-[#64748b]">
+                <div className="font-bold text-[#315fb6]">LangGraph Agent：{settingsStatus}</div>
+                <div className="mt-2 flex gap-5"><span>请求次数：{usage.requests}</span><span>估算 Token：{usage.totalTokensEstimated}</span></div>
+              </div>
+              <button type="button" onClick={async () => {
+                if (!settingsApiKey.trim()) { setSettingsStatus('请输入 API Key'); return; }
+                setSettingsStatus('保存中…');
+                const response = await fetch('http://127.0.0.1:4000/api/project-agent/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: settingsApiKey, model: settingsModel }) });
+                if (response.ok) {
+                  setSettingsStatus('保存成功，Agent 已可调用');
+                  setSettingsApiKey('');
+                  setAgentConnected(true);
+                  localStorage.setItem('roadwise-agent-configured', '1');
+                  window.setTimeout(() => setSettingsOpen(false), 350);
+                } else {
+                  setSettingsStatus('保存失败，请检查 API Key');
+                }
+              }} className="mt-5 h-10 w-full rounded-lg border border-[#b9ccef] bg-white text-sm font-bold text-[#315fb6] shadow-sm hover:border-[#8eabe0] hover:bg-[#f5f8ff]">保存并连接</button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

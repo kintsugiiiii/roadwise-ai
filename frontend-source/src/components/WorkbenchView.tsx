@@ -138,30 +138,30 @@ interface WorkbenchContract {
 }
 
 const reportMainTimeline: TimelineNode[] = [
-  { nodeId: 1, title: '创建项目', role: '项目经理', status: 'completed' },
-  { nodeId: 2, title: '成员同步', role: '项目经理', status: 'completed' },
-  { nodeId: 3, title: '底稿计划', role: '项目经理', status: 'completed' },
-  { nodeId: 4, title: '写底稿', role: '项目成员', status: 'completed' },
-  { nodeId: 5, title: '写报告', role: '项目成员', status: 'active' },
-  { nodeId: 6, title: '报告一审', role: '项目经理', status: 'pending' },
-  { nodeId: 7, title: '报告二审', role: '项目成员', status: 'pending' },
-  { nodeId: 8, title: '报告三审', role: '三审人员', status: 'pending' },
-  { nodeId: 9, title: '上传报备信息表', role: '项目成员', status: 'pending' },
-  { nodeId: 10, title: '申请出具', role: '项目成员', status: 'pending' },
+  { nodeId: 1, title: '确定目标', role: '项目负责人', status: 'completed' },
+  { nodeId: 2, title: '问题发现', role: '项目团队', status: 'completed' },
+  { nodeId: 3, title: '证据调研', role: '项目团队', status: 'completed' },
+  { nodeId: 4, title: '需求提炼', role: '项目成员', status: 'completed' },
+  { nodeId: 5, title: '方案设计', role: '项目成员', status: 'active' },
+  { nodeId: 6, title: '材料检查', role: 'Roadwise Agent', status: 'pending' },
+  { nodeId: 7, title: '阶段评审', role: '项目负责人', status: 'pending' },
+  { nodeId: 8, title: '成果汇报', role: '项目团队', status: 'pending' },
+  { nodeId: 9, title: '项目复盘', role: '项目负责人', status: 'pending' },
+  { nodeId: 10, title: '下一步行动', role: '项目团队', status: 'pending' },
 ];
 
 const projectStageLabels = reportMainTimeline.map((node) => node.title);
-const projectFavoritesStorageKey = 'huaxiaoan-react-workbench-favorites-v1';
-const projectArchiveStorageKey = 'huaxiaoan-react-workbench-archive-v1';
+const projectFavoritesStorageKey = 'roadwise-react-workbench-favorites-v1';
+const projectArchiveStorageKey = 'roadwise-react-workbench-archive-v1';
 
 const systemNotices = [
-  { id: 'release-20260721', type: '版本更新', title: '华小安工作台 V2.6.0 已发布', detail: '项目详情新增多合同链路切换，并优化待处理操作体验。', time: '今天 15:30', tone: 'blue' },
+  { id: 'release-20260721', type: '产品更新', title: 'Roadwise 阶段工作台已更新', detail: '现在可以在项目阶段中统一查看任务、材料和下一步行动。', time: '今天 15:30', tone: 'blue' },
   { id: 'maintenance-20260723', type: '系统维护', title: '7月23日凌晨进行例行维护', detail: '预计 02:00–03:00 短暂影响文件预览，项目数据不会受影响。', time: '今天 10:00', tone: 'amber' },
   { id: 'security-20260720', type: '安全提醒', title: '建议及时更新登录密码', detail: '检测到当前密码已使用超过 90 天，可前往账号安全进行更新。', time: '昨天', tone: 'green' },
 ] as const;
 
 const getProjectStageLabelLines = (label: string) => (
-  label === '上传报备信息表' ? ['上传报备', '信息表'] : [label]
+  label === '下一步行动' ? ['下一步', '行动'] : [label]
 );
 
 const reportParallelBranches = [
@@ -206,22 +206,13 @@ function buildReportTimeline(activeNodeId: number): TimelineNode[] {
 }
 
 const prototypeProjectSeeds = [
-  ['jinli-group', '金利集团有限公司专项审计', '金利集团有限公司', '专项审计', '符金雨', 65, 2, '2026-08-01', '进行中', 5],
-  ['codex-e2e', 'Codex-E2E-CPA-20260623', 'Codex有限公司', '年报审计', '陈华', 45, 1, '2026-07-25', '待处理', 6],
-  ['wls-3', 'WLS测试项目3', 'WLS科技有限公司', '财务审计', '蔡宇豪', 25, 3, '2026-08-15', '进行中', 3],
-  ['wls-4', 'WLS测试项目4', 'WLS科技有限公司', '社保审计', '陈嘉妍', 100, 0, '2026-07-10', '已完成', 10],
-  ['test-1', '测试项目1', '测试有限公司', '财务审计', '王磊', 10, 1, '2026-08-30', '进行中', 2],
-  ['huaxiao-internal', '华小安内部审计2026', '华小安科技', '内部审计', '张婷婷', 55, 2, '2026-07-28', '待处理', 6],
-  ['xx-finance', 'XX公司财务审计项目', 'XX有限公司', '财务审计', '李明', 30, 0, '2026-08-10', '进行中', 3],
-  ['yy-annual', 'YY集团年报审计2026', 'YY集团有限公司', '年报审计', '赵丽', 100, 0, '2026-06-30', '已完成', 10],
-  ['huabei-annual', '华北制造有限公司年报审计', '华北制造有限公司', '年报审计', '刘敏', 42, 1, '2026-08-22', '进行中', 4],
-  ['yuanhang-special', '远航供应链专项审计', '远航供应链有限公司', '专项审计', '周宁', 58, 2, '2026-08-18', '待处理', 5],
-  ['qiming-finance', '启明科技财务审计', '启明科技有限公司', '财务审计', '王倩', 35, 3, '2026-09-05', '进行中', 3],
-  ['xinghe-annual', '星河教育集团审计', '星河教育集团', '年报审计', '李岩', 70, 1, '2026-08-12', '进行中', 6],
-  ['haiyue-internal', '海岳咨询内部审计', '海岳咨询有限公司', '内部审计', '孙悦', 20, 2, '2026-09-16', '待处理', 2],
-  ['zhituo-special', '智拓信息专项审计', '智拓信息技术有限公司', '专项审计', '吴晨', 48, 1, '2026-08-28', '进行中', 4],
-  ['boyuan-finance', '博远商贸财务审计', '博远商贸有限公司', '财务审计', '郑凯', 15, 4, '2026-09-20', '进行中', 1],
-  ['xincheng-annual', '新城建设年报审计', '新城建设集团', '年报审计', '钱静', 62, 2, '2026-08-09', '待处理', 5],
+  ['innovation-1', '校园母婴空间调研', '学生创新团队', '学生创新项目', '符金雨', 65, 2, '2026-08-01', '进行中', 5],
+  ['startup-1', 'Roadwise 用户需求验证', '学生创业团队', '学生创业项目', '陈华', 45, 1, '2026-07-25', '待处理', 6],
+  ['innovation-2', '城市公共空间观察', '学生创新团队', '学生创新项目', '陈嘉妍', 100, 0, '2026-07-10', '已完成', 10],
+  ['startup-2', '校园服务 MVP 测试', '学生创业团队', '学生创业项目', '王磊', 10, 1, '2026-08-30', '进行中', 2],
+  ['sop-1', '团队研究流程 SOP', 'Roadwise 团队', '企业 SOP', '张婷婷', 55, 2, '2026-07-28', '待处理', 6],
+  ['personal-2', '毕业论文研究计划', '个人项目', '个人项目', '李明', 30, 0, '2026-08-10', '进行中', 3],
+  ['startup-3', '校园创业路演准备', '学生创业团队', '学生创业项目', '赵丽', 70, 1, '2026-08-12', '进行中', 6],
 ] as const;
 
 const prototypeContractTimeline: TimelineNode[] = [
@@ -362,7 +353,7 @@ function ProjectOverview({ projects, onOpenProject, onNewProject, onOpenTagSyste
   }, [tab, query, statusFilter, typeFilter, ownerFilter, clientFilter, startDate, endDate, minimumProgress]);
 
   useEffect(() => {
-    sessionStorage.setItem('huaxiaoan-react-workbench', JSON.stringify({ tab, page: currentPage, isList }));
+    sessionStorage.setItem('roadwise-react-workbench', JSON.stringify({ tab, page: currentPage, isList }));
   }, [currentPage, isList, tab]);
 
   useEffect(() => {
@@ -402,7 +393,7 @@ function ProjectOverview({ projects, onOpenProject, onNewProject, onOpenTagSyste
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `华小安项目列表-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `RoadwiseLab项目列表-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -425,9 +416,9 @@ function ProjectOverview({ projects, onOpenProject, onNewProject, onOpenTagSyste
   return <>
     <div id="workbench-view-root" className="min-w-0 flex-1 overflow-y-auto bg-[#f7f8fc] p-4 select-none custom-scrollbar md:p-5 2xl:p-6">
       <header className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex items-baseline gap-5"><h1 className="text-[23px] font-black text-[#202d55]">工作台</h1><span className="text-xs font-bold text-[#76819c]">全部项目 <b className="text-[#5967b8]">{activeProjects.length.toLocaleString()}</b> 个</span></div>
+        <div className="flex items-baseline gap-5"><div><h1 className="text-[23px] font-black text-[#202d55]">Roadwise 工作台</h1><p className="mt-1 text-[10px] font-bold text-[#8b97aa]">把复杂项目拆成阶段、任务、材料和评审</p></div><span className="text-xs font-bold text-[#76819c]">全部项目 <b className="text-[#5967b8]">{activeProjects.length.toLocaleString()}</b> 个</span></div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <button type="button" onClick={onOpenTagSystem} className="flex h-9 items-center gap-2 rounded-lg border border-[#cfd9ea] bg-white px-3 text-[10px] font-black text-[#3d5f9f] hover:border-[#9eb2d8] hover:bg-[#f5f8ff]"><GitBranch className="h-3.5 w-3.5" />审计标注系统</button>
+          <button type="button" onClick={onOpenTagSystem} className="flex h-9 items-center gap-2 rounded-lg border border-[#cfd9ea] bg-white px-3 text-[10px] font-black text-[#3d5f9f] hover:border-[#9eb2d8] hover:bg-[#f5f8ff]"><GitBranch className="h-3.5 w-3.5" />项目知识图谱</button>
           <label className="compound-control flex h-9 w-full items-center gap-2 rounded-lg border border-[#dfe5f0] bg-white px-3 text-[#8492aa] sm:w-[345px]"><Search aria-hidden="true" className="h-4 w-4" /><input aria-label="搜索项目" name="project-search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-[#36496d] outline-none" placeholder="搜索项目名称、编号、客户、负责人…" /></label>
           <div className="relative">
             <button type="button" aria-label="系统通知" aria-expanded={isNoticeOpen} onClick={() => setIsNoticeOpen((open) => !open)} className={`relative grid h-9 w-9 place-items-center rounded-lg border bg-white text-[#60718c] ${isNoticeOpen ? 'border-[#9bb5ef] ring-2 ring-[#dce7ff]' : 'border-[#e0e6f0]'}`}><Bell className="h-4 w-4" />{unreadNoticeCount > 0 && <b className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-[#ed5263] px-1 text-[8px] text-white">{unreadNoticeCount}</b>}</button>
@@ -454,7 +445,7 @@ function ProjectOverview({ projects, onOpenProject, onNewProject, onOpenTagSyste
 
         <div className="flex items-center gap-2 overflow-x-auto border-b border-[#e7ebf2] px-5 py-2.5">
           <select aria-label="项目状态" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-8 shrink-0 rounded-md border border-[#dde4ee] bg-white px-2 text-[11px] font-bold text-[#687994]"><option>全部状态</option><option>进行中</option><option>待处理</option><option>已完成</option></select>
-          <select aria-label="项目类型" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="h-8 shrink-0 rounded-md border border-[#dde4ee] bg-white px-2 text-[11px] font-bold text-[#687994]"><option>全部类型</option>{['专项审计', '年报审计', '财务审计', '内部审计', '社保审计'].map((value) => <option key={value}>{value}</option>)}</select>
+          <select aria-label="项目类型" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="h-8 shrink-0 rounded-md border border-[#dde4ee] bg-white px-2 text-[11px] font-bold text-[#687994]"><option>全部类型</option>{['个人项目', '学生创新项目', '学生创业项目', '企业 SOP'].map((value) => <option key={value}>{value}</option>)}</select>
           <select aria-label="负责人" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="h-8 shrink-0 rounded-md border border-[#dde4ee] bg-white px-2 text-[11px] font-bold text-[#687994]"><option>全部负责人</option>{Array.from(new Set(allProjects.map((project) => project.owner).filter(Boolean))).map((value) => <option key={value}>{value}</option>)}</select>
           <select aria-label="客户" value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="h-8 shrink-0 rounded-md border border-[#dde4ee] bg-white px-2 text-[11px] font-bold text-[#687994]"><option>全部客户</option>{Array.from(new Set(allProjects.map((project) => project.client).filter(Boolean))).map((value) => <option key={value}>{value}</option>)}</select>
           <label className="compound-control flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-[#dde4ee] bg-white px-2 text-[10px] font-bold text-[#687994]">开始时间<input aria-label="开始时间" name="project-start-date" autoComplete="off" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="bg-transparent text-[10px] outline-none" /></label>
@@ -3536,7 +3527,7 @@ export default function WorkbenchView({
                     {auditDocumentTab === 'report' ? (
                       <article className="mx-auto min-h-[980px] max-w-[680px] bg-white px-16 py-14 shadow-md">
                         <h1 className="text-center text-lg font-black tracking-wide text-[#17233b]">专项审计报告</h1>
-                        <p className="mt-2 text-center text-[10px] font-bold text-[#8590a2]">华小安审字〔2026〕第 0811 号</p>
+                        <p className="mt-2 text-center text-[10px] font-bold text-[#8590a2]">RoadwiseLab审字〔2026〕第 0811 号</p>
                         <section className="mt-10 text-[12px] leading-7 text-[#344158]"><h3 className="mb-2 font-black text-[#1f2d45]">一、审计意见</h3><p>我们审计了金利集团有限公司财务报表，包括 2026 年 6 月 30 日的资产负债表、利润表、现金流量表以及相关财务报表附注。我们认为，后附的财务报表在所有重大方面按照企业会计准则的规定编制，公允反映了金利集团的财务状况。</p></section>
                         <section className="mt-7 text-[12px] leading-7 text-[#344158]"><h3 className="mb-2 font-black text-[#1f2d45]">二、形成审计意见的基础</h3><p>我们按照中国注册会计师审计准则的规定执行了审计工作。我们独立于被审计单位，并履行了职业道德方面的其他责任。我们相信，我们获取的审计证据是充分、适当的，为发表审计意见提供了基础。</p></section>
                         <section className="mt-7 text-[12px] leading-7 text-[#344158]"><h3 className="mb-2 font-black text-[#1f2d45]">三、关键审计事项</h3><p>截至报告期末，应收账款账面余额为 <button type="button" onClick={() => setActiveAuditIssue(0)} className="rounded bg-[#ffe6e8] px-1 font-black text-[#a92b3a] ring-1 ring-[#f5b7be]">¥48,230,000</button>，管理层按照预期信用损失模型计提坏账准备。AI 质检发现该金额与附注五（3）披露的 <button type="button" onClick={() => setActiveAuditIssue(0)} className="rounded bg-[#fff1cc] px-1 font-black text-[#8a5909] ring-1 ring-[#efd994]">¥46,230,000</button> 存在差异，建议复核底稿索引 A12-04。</p><p className="mt-4">收入确认采用时点法。抽样检查显示 12 月最后五个工作日确认的服务收入中，有 <button type="button" onClick={() => setActiveAuditIssue(1)} className="rounded bg-[#fff1cc] px-1 font-black text-[#8a5909] ring-1 ring-[#efd994]">3 笔合同缺少客户验收单</button>，涉及金额 ¥1,280,000。</p></section>

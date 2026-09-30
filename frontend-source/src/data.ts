@@ -75,7 +75,7 @@ export const initialProjects: Project[] = ([
     ],
     agents: [
       {
-        name: '华小安主控',
+        name: 'RoadwiseLab 主控',
         avatarIcon: 'Bot',
         role: '主控',
         description: '统领其他智能体，执行指令与决策',
@@ -94,12 +94,12 @@ export const initialProjects: Project[] = ([
         id: 'msg-1',
         sender: { name: '符金雨', avatarText: '符' },
         time: '11:20',
-        content: '@华小安主控 请帮我汇总一下项目当前的风险点，并生成一份日报',
+        content: '@RoadwiseLab 主控 请帮我汇总一下项目当前的风险点，并生成一份日报',
       },
       {
         id: 'msg-2',
         sender: {
-          name: '华小安主控',
+          name: 'RoadwiseLab 主控',
           avatarIcon: 'Bot',
           avatarBg: 'bg-indigo-600',
           isAi: true,
@@ -115,7 +115,7 @@ export const initialProjects: Project[] = ([
             { id: 'item-3', text: '3. 生成项目日报', status: 'processing' },
           ],
           assignments: [
-            { role: '风险分析师', agentName: '华小安主控', status: 'completed' },
+            { role: '风险分析师', agentName: 'RoadwiseLab 主控', status: 'completed' },
             { role: '进度分析师', agentName: '报告助理', status: 'processing' },
             { role: '报告助理', agentName: '报告助理', status: 'pending' },
           ],
@@ -141,7 +141,7 @@ export const initialProjects: Project[] = ([
       {
         id: 'msg-4',
         sender: {
-          name: '华小安主控',
+          name: 'RoadwiseLab 主控',
           avatarIcon: 'Bot',
           avatarBg: 'bg-indigo-600',
           isAi: true,
@@ -169,7 +169,7 @@ export const initialProjects: Project[] = ([
     ],
     agents: [
       {
-        name: '华小安主控',
+        name: 'RoadwiseLab 主控',
         avatarIcon: 'Bot',
         role: '主控',
         description: '智能工作助理',
@@ -240,7 +240,7 @@ export const initialProjects: Project[] = ([
     agents: [],
     messages: [],
   },
-  createMockProjectGroup('huaxiao-internal', '华小安内部审计2026', '张婷婷', '审核中', 55, 1),
+  createMockProjectGroup('roadwise-internal', 'RoadwiseLab 内部审计2026', '张婷婷', '审核中', 55, 1),
   createMockProjectGroup('xx-finance', 'XX公司财务审计项目', '李明', '进行中', 30, 2),
   createMockProjectGroup('yy-annual', 'YY集团年报审计2026', '赵丽', '已完成', 100, 3),
   createMockProjectGroup('huabei-annual', '华北制造有限公司年报审计', '刘敏', '进行中', 42, 4),

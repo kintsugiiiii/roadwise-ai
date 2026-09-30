@@ -66,9 +66,9 @@ export default function DirectChatView({
         { sender: 'me', text: '目前还比较顺利，智能体的底稿匹配率比我们想象的要高。', time: '今天 10:00', isRead: true },
         { sender: 'me', text: '下午两点的联调会议，你那边准备得怎么样了？', time: '今天 11:45', isRead: false },
       ],
-      '华小安主控': [
+      'RoadwiseLab 主控': [
         { sender: 'other', text: '您好，我是您的智能审计主控助理，已为您准备好华安云审计工作台。', time: '今天 08:30' },
-        { sender: 'me', text: '华小安，帮我查一下底稿归集培训演示视频在哪？', time: '今天 08:35', isRead: true },
+        { sender: 'me', text: 'RoadwiseLab，帮我查一下底稿归集培训演示视频在哪？', time: '今天 08:35', isRead: true },
         { sender: 'other', text: '已为您在右侧文件列表中整理出【底稿归集培训演示视频.mp4】。您可以点击直接进行下载和查看。', time: '今天 08:36' },
         { sender: 'me', text: '好的，辛苦了，今天有什么紧急任务吗？', time: '今天 08:40', isRead: false },
       ]
@@ -403,7 +403,7 @@ export default function DirectChatView({
       if (userText.includes('排期') || userText.includes('计划')) {
         replyText = `好滴，关于排期计划，我已经在项目排期表中填了我的研发工时预估，可以随时核对！`;
       } else if (userText.includes('底稿') || userText.includes('报告')) {
-        replyText = `底稿第一版我已经归集得差不多了，已经提交给主控华小安核对了，看看一审还需要什么材料。`;
+        replyText = `底稿第一版我已经归集得差不多了，已经提交给 RoadwiseLab 主控核对了，看看一审还需要什么材料。`;
       }
       setMessages(prev => [...prev, { 
         sender: 'other', 

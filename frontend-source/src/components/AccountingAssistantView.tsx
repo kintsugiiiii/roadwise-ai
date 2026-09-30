@@ -76,7 +76,7 @@ export default function AccountingAssistantView({
 - **研发费用比例**：近三年研发费用占营业收入的平均比例为 5.2%（红线 5%），存在极小的下行波动风险。
 - **归集辅助账**：建议查看最近文件中的“项目排期计划表.xlsx”，核对是否有跨期人工成本被误归集到非研发科目。`;
       } else {
-        aiResponse = `您好！我是您的 **华小安**。
+        aiResponse = `您好！我是您的 **RoadwiseLab 助手**。
 
 关于您咨询的财务问题，我已经结合当前项目 **${selectedProjectContext}** 的上下文进行了审计标准和数据准则比对：
 - **当前执行标准**：企业会计准则第 14 号——收入（2025版）。
@@ -133,7 +133,7 @@ export default function AccountingAssistantView({
                 </div>
                 <div className="space-y-1">
                   <h2 className="text-lg font-black text-gray-800 flex items-center justify-center gap-1.5 cursor-pointer hover:text-[#0052d9]">
-                    <span>华小安</span>
+                    <span>RoadwiseLab</span>
                     <ChevronDown className="w-4 h-4 text-gray-400" />
                   </h2>
                   <p className="text-xs text-gray-400 font-bold tracking-wider">专业的财务分析与会计咨询助手</p>
@@ -189,7 +189,7 @@ export default function AccountingAssistantView({
                   </div>
                   <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-2xl rounded-tl-none border border-gray-100 shadow-sm text-xs text-gray-400 font-bold">
                     <Loader2 className="w-4 h-4 animate-spin text-[#0052d9]" />
-                    <span>华小安正在编制分析结论...</span>
+                    <span>RoadwiseLab 正在编制分析结论...</span>
                   </div>
                 </div>
               )}

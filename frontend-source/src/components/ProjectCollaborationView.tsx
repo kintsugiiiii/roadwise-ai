@@ -417,7 +417,7 @@ export default function ProjectCollaborationView({
                 <div className="w-4 h-4 bg-[#00a3ff] rounded flex items-center justify-center text-white shrink-0">
                   <Bot className="w-2.5 h-2.5" />
                 </div>
-                <span className="text-[10px] font-extrabold text-[#00174b]">华小安主控</span>
+                <span className="text-[10px] font-extrabold text-[#00174b]">RoadwiseLab 主控</span>
               </div>
               <div className="flex items-center gap-1 px-2 py-0.5 bg-[#dbe1ff] rounded-lg border border-blue-200/10">
                 <div className="w-4 h-4 bg-emerald-500 rounded flex items-center justify-center text-white shrink-0">

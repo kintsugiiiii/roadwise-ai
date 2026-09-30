@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import SourceDownstreamAuditWorkflow from "../downstream-audit/App";
+import ReactFlowCaseLibraryGraphView from "./ReactFlowCaseLibraryGraphView";
+import CaseLibraryProjectDetail from "./CaseLibraryProjectDetail";
+import ChatHomeView from "./ChatHomeView";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,6 +13,7 @@ import {
   CircleDot,
   Filter,
   GitBranch,
+  MoreHorizontal,
   Plus,
   Search,
   ShieldCheck,
@@ -17,6 +21,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { readSharedAgentMessages, subscribeSharedAgentMessages, writeSharedAgentMessages } from "../lib/agentSession";
 
 type RuleType = "风险信号" | "审计程序" | "合规检查" | "内控测试";
 type RuleStatus = "生效中" | "待复核" | "草稿";
@@ -1016,8 +1021,8 @@ function AgentOrchestration({
     },
     {
       id: "graph",
-      name: "图谱检索 Agent",
-      role: "Graph RAG",
+      name: "RoadwiseLab推出的Agent",
+      role: "负责项目拆解、管理与评审",
       color: "bg-violet-500",
       status: "运行中",
       task: "补齐跨循环关联标签",
@@ -1293,6 +1298,13 @@ type CreatedAuditProject = {
   name: string;
   client: string;
   period: string;
+};
+
+const resolveStoredProjectClient = (state: any): string => {
+  const text = [state?.projectType, state?.client, state?.projectName, state?.summary, state?.materialAnalysis, ...(Array.isArray(state?.userQuestions) ? state.userQuestions : []), ...(Array.isArray(state?.attachments) ? state.attachments.map((item: any) => item?.name) : [])].filter(Boolean).join(" ");
+  if (/创业|商业计划|商业化|市场验证|融资|客户付费|商业模式|平台|产品|资产管理|商业计划书/.test(text)) return "创业项目";
+  if (/企业内部|组织流程|SOP|团队流程|部门协作/.test(text)) return "企业项目";
+  return ["个人项目", "创业项目", "企业项目"].includes(state?.client) ? state.client : "个人项目";
 };
 
 function MaterialityReviewPanel({
@@ -1819,9 +1831,11 @@ function MaterialityReviewPanel({
 function LibraryTagListPanel({
   nodes,
   onReference,
+  projectFlow,
 }: {
   nodes: Array<{ id: string; label: string; kind: string; color: string }>;
   onReference: (value: string) => void;
+  projectFlow?: string[];
 }) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("全部类型");
@@ -1829,27 +1843,54 @@ function LibraryTagListPanel({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const kinds = ["全部类型", "风险信号", "内控测试", "审计程序", "合规检查"];
-  const statuses = ["全部状态", "生效中", "待复核", "草稿"];
-  const rows = nodes.map((node, index) => ({
-    ...node,
-    code: `${node.kind === "风险信号" ? "RS" : node.kind === "内控测试" ? "CT" : node.kind === "审计程序" ? "AP" : "CC"}-${String(nodes.slice(0, index + 1).filter((item) => item.kind === node.kind).length).padStart(3, "0")}`,
-    status:
-      (index * 73) % 173 < 147
-        ? "生效中"
-        : (index * 73) % 173 < 163
-          ? "待复核"
-          : "草稿",
+  const [agentProjects, setAgentProjects] = useState<Array<{ name: string; client?: string; summary?: string; materialAnalysis?: string; userQuestions?: string[]; attachments?: Array<{ name?: string; summary?: string }>; reviewVersions?: Array<{ version: string; date: string; result?: { message?: string } }>; graph: Array<{ name?: string; label?: string; description?: string; tasks?: string[] }> }>>([]);
+  useEffect(() => {
+    const syncAgentProject = () => {
+      try {
+        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+        const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+        const states = [...(Array.isArray(collection) ? collection : []), ...(current?.projectName ? [current] : [])];
+        const deduped = new Map<string, { name: string; client?: string; summary?: string; materialAnalysis?: string; userQuestions?: string[]; attachments?: Array<{ name?: string; summary?: string }>; reviewVersions?: Array<{ version: string; date: string; result?: { message?: string } }>; graph: Array<{ name?: string; label?: string; description?: string; tasks?: string[] }> }>();
+        states.filter((state) => typeof state?.projectName === "string").forEach((state) => {
+          deduped.set(state.projectName, { name: state.projectName, client: resolveStoredProjectClient(state), summary: state.summary, materialAnalysis: state.materialAnalysis, userQuestions: state.userQuestions || [], attachments: state.attachments || [], reviewVersions: state.reviewVersions || [], graph: Array.isArray(state.graph) ? state.graph : [] });
+        });
+        setAgentProjects(Array.from(deduped.values()));
+      } catch { setAgentProjects([]); }
+    };
+    syncAgentProject();
+    window.addEventListener("roadwise-project-state-updated", syncAgentProject);
+    return () => window.removeEventListener("roadwise-project-state-updated", syncAgentProject);
+  }, []);
+  const kinds = ["全部类型", "个人项目", "创业项目", "企业项目"];
+  const statuses = ["全部状态", "未完成", "已完成"];
+  const caseSeeds = [
+    ["Roadwise 用户需求验证", "个人项目", "已完成", "MVP验证", "项目负责人", "6 个节点", "2026-09-10"],
+    ["社区共享自习室验证", "创业项目", "已完成", "转化验证", "研究团队", "6 个节点", "2026-09-12"],
+    ["团队研究流程 SOP", "企业项目", "已完成", "SOP试运行", "Roadwise Agent", "6 个节点", "2026-08-28"],
+    ...agentProjects.map((project) => [project.name, project.client || "个人项目", "进行中", "项目创建", "项目负责人", `${project.graph.length || 0} 个节点`, new Date().toISOString().slice(0, 10)]),
+  ];
+  const typeColors: Record<string, string> = {
+    "个人项目": "#7b61c9",
+    "创业项目": "#36b9c8",
+    "企业项目": "#56b96b",
+  };
+  const rows = caseSeeds.map(([label, kind, status, stage, owner, projects, updated], index) => ({
+    id: `case-${index + 1}`,
+    label,
+    kind,
+    status,
+    stage,
+    color: typeColors[kind] ?? "#8794a7",
     version: `v${1 + (index % 3)}.${index % 10}`,
-    owner: ["审计方法组", "财务审计组", "内控与合规组"][index % 3],
-    projects: 2 + ((index * 7) % 43),
-    updated: `2026-0${5 + (index % 3)}-${String(8 + (index % 20)).padStart(2, "0")}`,
+    owner,
+    projects,
+    updated,
   }));
   const filtered = rows.filter(
     (row) =>
       (kind === "全部类型" || row.kind === kind) &&
       (status === "全部状态" || row.status === status) &&
-      `${row.code}${row.label}${row.owner}`
+      `${row.label}${row.kind}${row.owner}${row.stage}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
   );
@@ -1857,6 +1898,102 @@ function LibraryTagListPanel({
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const typeCounts = ["个人项目", "创业项目", "企业项目"].map((type) => ({
+    type,
+    count: rows.filter((row) => row.kind === type).length,
+    color: typeColors[type],
+  }));
+  const flowByCase: Record<string, string[]> = {
+    "Roadwise 用户需求验证": ["目标与假设", "用户访谈", "问卷数据", "需求优先级", "MVP验证", "阶段复盘"],
+    "社区共享自习室验证": ["市场规模", "场景观察", "用户画像", "竞品拆解", "方案实验", "转化验证"],
+    "团队研究流程 SOP": ["流程目标", "现状基线", "信息源接入", "指标口径", "SOP试运行", "质量复盘"],
+  };
+  const agentProject = agentProjects[agentProjects.length - 1] ?? null;
+  if (agentProject) {
+    flowByCase[agentProject.name] = projectFlow?.length
+      ? projectFlow
+      : agentProject.graph.length
+      ? agentProject.graph.map((item) => item.name || item.label || "未命名节点")
+      : ["项目目标", "资料整理", "任务拆解", "阶段评审"];
+  }
+  const projectTasks = agentProject
+    ? Object.fromEntries(agentProject.graph.map((item, index) => [
+        item.name || item.label || `未命名节点${index + 1}`,
+        Array.isArray(item.tasks) ? item.tasks : [],
+      ]))
+    : undefined;
+  const projectDescriptions = agentProject
+    ? Object.fromEntries(agentProject.graph.map((item, index) => [
+        item.name || item.label || `未命名节点${index + 1}`,
+        item.description || agentProject.materialAnalysis || "暂无该环节的材料分析。",
+      ]))
+    : undefined;
+  const flowDescriptions: Record<string, string> = {
+    "目标与假设": "目标：验证用户是否愿意为结构化项目指导持续使用 Roadwise。假设：每周使用 2 次以上的用户，阶段任务完成率会提升 20%。",
+    "用户访谈": "渠道：半结构化访谈 12 人，覆盖学生、独立创作者和项目负责人；记录原话、行为频率、当前替代方案和付费阻力。",
+    "问卷数据": "渠道：线上问卷 N=86，有效样本 79 份；重点指标包括需求选择率、痛点频率、任务中断率和可接受价格区间。",
+    "需求优先级": "采用 RICE 评分：Reach、Impact、Confidence、Effort 四项量化排序，首版聚焦阶段任务拆解和材料诊断。",
+    "MVP验证": "上线 2 周 MVP，跟踪激活率、首个任务完成率、7 日留存和关键路径转化；通过条件为首个任务完成率 ≥60%。",
+    "阶段复盘": "对比验证前后数据，确认假设是否成立，记录未解决问题，并决定继续投入、调整方案或停止该方向。",
+    "市场规模": "渠道：商圈客流报告、地图热力数据和访谈估算；测算目标商圈内备考学生与自由职业者规模，并以 3 公里覆盖人数估算首批市场容量。",
+    "场景观察": "在 4 家自习空间观察 40 名用户，记录入场时段、连续学习时长、座位偏好、离场原因和高峰期占座率。",
+    "用户画像": "基于 20 组访谈建立备考学生、远程办公者两类画像，明确使用频率、可接受价格、核心任务和续费触发点。",
+    "竞品拆解": "对比 6 家共享自习室的定价、座位密度、环境服务、预约方式和月卡续费率，提炼差异化机会。",
+    "方案实验": "用两种定价与预约方案进行 A/B 测试，指标包括预约点击率、首次到店率、座位使用率、满意度和单客获客成本。",
+    "转化验证": "以 4 周为周期验证曝光—预约—到店—续费漏斗，目标预约转化率 ≥10%、到店率 ≥60%、月卡续费率 ≥35%。",
+    "流程目标": "将研究项目从立项到复盘的平均周期从 21 天压缩到 14 天，同时保持关键材料完整率 ≥90%。",
+    "现状基线": "盘点近 10 个项目的耗时、返工次数、延期任务和材料缺失点，建立改版前基线数据。",
+    "信息源接入": "接入项目文档、访谈记录、问卷结果、会议纪要和任务系统，要求每个结论都能追溯到来源。",
+    "指标口径": "统一任务完成率、材料完整率、评审通过率、返工次数和阶段耗时的计算方式，避免团队各自解释。",
+    "SOP试运行": "选择 3 个真实项目试运行两周，记录流程卡点、Agent 建议采纳率、人工修订次数和节点跳过率。",
+    "质量复盘": "对比试运行前后指标，保留有效步骤，删除低价值表单，并输出下一版 SOP 的变更记录。",
+  };
+  const caseSummaries: Record<string, string> = {
+    "Roadwise 用户需求验证": "围绕项目负责人在立项、调研和阶段推进中的真实需求，验证 Roadwise 是否能帮助用户把模糊想法拆解为可执行任务，并通过证据和指标完成阶段决策。目标是验证 MVP 的核心使用价值，提升首个任务完成率和项目持续推进率。",
+    "社区共享自习室验证": "针对备考学生和远程办公者，研究社区共享自习室是否存在稳定需求，以及用户愿意为何种空间服务和价格付费。项目通过场景观察、竞品分析和小规模运营实验，验证从预约到到店再到月卡续费的商业转化路径。",
+    "团队研究流程 SOP": "将团队现有的研究项目流程标准化，从立项、信息收集、证据整理到阶段评审建立统一工作方式。目标是减少重复返工和材料遗漏，让每个关键结论都能追溯到信息来源，并缩短项目从立项到复盘的周期。",
+  };
+  const networkNodes: Array<{ label: string; x: number; y: number; color: string; type?: string; caseName?: string; parent?: string }> = [
+    { label: "个人项目", x: 24, y: 30, color: "#7b61c9", type: "个人项目", parent: "案例总数" },
+    { label: "创业项目", x: 50, y: 30, color: "#36b9c8", type: "创业项目", parent: "案例总数" },
+    { label: "企业项目", x: 76, y: 30, color: "#56b96b", type: "企业项目", parent: "案例总数" },
+    ...rows.map((row, index) => ({ label: row.label, x: ({ "个人项目": 22, "创业项目": 50, "企业项目": 78 }[row.kind] ?? 50) + ((index % 2) ? 5 : -5), y: 55, color: "#9aa7b8", caseName: row.label, parent: row.kind })),
+  ];
+  const typeAngles: Record<string, number> = { "个人项目": -Math.PI / 2, "创业项目": 0.55, "企业项目": 2.55 };
+  const positionedNodes: Record<string, { x: number; y: number }> = {};
+  networkNodes.filter((node) => node.type).forEach((node) => {
+    const angle = typeAngles[node.type ?? "个人项目"] ?? 0;
+    positionedNodes[node.label] = { x: 50 + Math.cos(angle) * 20, y: 50 + Math.sin(angle) * 20 };
+  });
+  networkNodes.filter((node) => node.caseName).forEach((node, index) => {
+    const parent = positionedNodes[node.parent ?? ""] ?? { x: 50, y: 50 };
+    const siblingIndex = networkNodes.filter((item) => item.parent === node.parent && item.caseName).indexOf(node);
+    const siblingCount = networkNodes.filter((item) => item.parent === node.parent && item.caseName).length;
+    const baseAngle = Math.atan2(parent.y - 50, parent.x - 50);
+    const spread = siblingCount > 1 ? (siblingIndex - (siblingCount - 1) / 2) * Math.min(1.25, 3.2 / siblingCount) : 0;
+    const angle = baseAngle + spread;
+    positionedNodes[node.label] = { x: parent.x + Math.cos(angle) * 28, y: parent.y + Math.sin(angle) * 28 };
+  });
+  networkNodes.filter((node) => !node.type && !node.caseName).forEach((node, index) => {
+    const parent = positionedNodes[node.parent ?? ""] ?? { x: 50, y: 50 };
+    const baseAngle = Math.atan2(parent.y - 50, parent.x - 50);
+    const siblingNodes = networkNodes.filter((item) => item.parent === node.parent && !item.type && !item.caseName);
+    const siblingIndex = siblingNodes.indexOf(node);
+    const angle = baseAngle + (siblingIndex - (siblingNodes.length - 1) / 2) * 0.22;
+    positionedNodes[node.label] = { x: parent.x + Math.cos(angle) * 14, y: parent.y + Math.sin(angle) * 14 };
+  });
+  const radialNetworkNodes = networkNodes.map((node) => ({ ...node, ...(positionedNodes[node.label] ?? { x: 50, y: 50 }) }));
+  const networkPositionByLabel = Object.fromEntries(radialNetworkNodes.map((node) => [node.label, node]));
+  const [networkPositions, setNetworkPositions] = useState<Record<string, { x: number; y: number }>>(() => Object.fromEntries(radialNetworkNodes.map((node) => [node.label, { x: node.x, y: node.y }])));
+  const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  const [graphPan, setGraphPan] = useState({ x: 0, y: 0 });
+  const [panStart, setPanStart] = useState<{ x: number; y: number; originX: number; originY: number } | null>(null);
+  const [graphScale, setGraphScale] = useState(1);
+  const networkTopologyKey = radialNetworkNodes.map((node) => `${node.label}:${node.x.toFixed(2)}:${node.y.toFixed(2)}`).join("|");
+  useEffect(() => {
+    setNetworkPositions(Object.fromEntries(radialNetworkNodes.map((node) => [node.label, { x: node.x, y: node.y }])));
+  }, [networkTopologyKey]);
+  const getNetworkPosition = (label: string) => label === "案例总数" ? { x: 50, y: 50 } : networkPositions[label] ?? networkPositionByLabel[label] ?? { x: 50, y: 50 };
   useEffect(() => setPage(1), [query, kind, status]);
   const toggleAll = () =>
     setSelected(
@@ -1871,51 +2008,112 @@ function LibraryTagListPanel({
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-[15px] font-black text-[#2f405b]">
-                全所标签资产
+                项目案例库
               </h2>
-              <p className="mt-1 text-[10px] font-bold text-[#718097]">
-                统一查看、维护和发布全所公共标签；项目只引用已生效版本。
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="h-9 rounded-md border border-[#cdd7e6] bg-white px-3 text-[10px] font-black text-[#506893]"
-              >
-                导出清单
-              </button>
-              <button
-                type="button"
-                onClick={() => onReference("新建全所标签")}
-                className="flex h-9 items-center gap-1.5 rounded-md bg-[#2459c4] px-4 text-[10px] font-black text-white"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                新建标签
-              </button>
             </div>
           </header>
 
-          <section className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#dfe5ed] bg-[#dfe5ed] sm:grid-cols-4">
-            {[
-              ["标签总数", "173", "全所公共资产"],
-              ["生效中", "147", "可被项目引用"],
-              ["待复核", "16", "等待方法组审批"],
-              ["草稿", "10", "尚未发布"],
-            ].map(([label, value, note]) => (
-              <div key={label} className="bg-white px-4 py-3">
-                <span className="text-[9px] font-bold text-[#7e8b9f]">
-                  {label}
-                </span>
-                <div className="mt-1 flex items-end gap-2">
-                  <strong className="text-xl font-black text-[#334761]">
-                    {value}
-                  </strong>
-                  <small className="pb-0.5 text-[8px] font-bold text-[#929daf]">
-                    {note}
-                  </small>
-                </div>
+          <section className="hidden relative mt-4 min-h-[300px] overflow-hidden rounded-xl border border-[#dfe5ed] bg-[radial-gradient(circle_at_center,#ffffff_0%,#f3f7fc_78%)] px-5 py-5">
+            <div className="pointer-events-none absolute inset-[12%] rounded-full border border-[#d9e5f4]" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 hidden h-px w-[31%] -translate-x-1/2 -translate-y-1/2 rotate-[22deg] bg-[#c8d9ee] sm:block" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 hidden h-px w-[31%] -translate-x-1/2 -translate-y-1/2 -rotate-[22deg] bg-[#c8d9ee] sm:block" />
+            <div className="pointer-events-none absolute bottom-[19%] left-1/2 hidden h-[16%] w-px -translate-x-1/2 bg-[#c8d9ee] sm:block" />
+            <div className="relative z-10 mx-auto h-[258px] max-w-[780px]">
+              <button type="button" onClick={() => setKind("全部类型")} className={`absolute left-1/2 top-[38%] grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-white bg-[#edf2ff] shadow-[0_6px_20px_rgba(56,88,145,.18)] outline outline-1 outline-[#cbd9ee] transition hover:scale-105 hover:bg-[#e4ecff] ${kind === "全部类型" ? "ring-2 ring-[#8eace4] ring-offset-2" : ""}`} aria-label="显示全部案例">
+                <div className="text-center"><strong className="block text-2xl font-black text-[#294875]">{rows.length}</strong><span className="text-[10px] font-bold text-[#71839f]">案例总数</span></div>
+              </button>
+              {typeCounts.map(({ type, count, color }, index) => (
+                <button type="button" key={type} onClick={() => setKind(type)} className={`absolute w-[128px] rounded-lg border bg-white/95 px-2.5 py-2 text-left shadow-[0_3px_10px_rgba(62,85,120,.08)] transition hover:-translate-y-1 hover:shadow-[0_7px_16px_rgba(62,85,120,.14)] ${kind === type ? "border-[#7394ce] ring-2 ring-[#dce7fa]" : "border-[#e0e6ef]"} ${index === 0 ? "left-[4%] top-[42%] -translate-y-1/2" : index === 1 ? "right-[4%] top-[42%] -translate-y-1/2" : "bottom-0 left-1/2 -translate-x-1/2"}`}>
+                  <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} /><strong className="text-[11px] font-black text-[#344a68]">{type}</strong></div>
+                  <div className="mt-1 flex items-end gap-1.5"><strong className="text-lg font-black text-[#334761]">{count}</strong><span className="pb-0.5 text-[9px] font-bold text-[#8795aa]">个案例</span></div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-center gap-5 border-t border-[#e8edf4] pt-3 text-[10px] font-bold text-[#8190a5]">
+              <span>未完成 {rows.filter((row) => row.status === "未完成").length}</span>
+              <span className="text-[#b7791f]">已完成 {rows.filter((row) => row.status === "已完成").length}</span>
+            </div>
+          </section>
+
+          <section className="relative mt-4 overflow-hidden rounded-xl border border-[#dfe5ed] bg-white">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#ffffff_0%,#f8fafc_72%)]" />
+            <svg viewBox="0 0 1000 560" className={`relative h-[430px] w-full min-w-[760px] touch-none ${panStart ? "cursor-grabbing" : "cursor-grab"}`} role="img" aria-label="项目案例动态关系图谱" onWheel={(event) => { event.preventDefault(); setGraphScale((current) => Math.min(1.8, Math.max(0.65, current + (event.deltaY > 0 ? -0.08 : 0.08)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setPanStart({ x: event.clientX, y: event.clientY, originX: graphPan.x, originY: graphPan.y }); }} onPointerMove={(event) => { const rect = event.currentTarget.getBoundingClientRect(); if (draggingNode) { setNetworkPositions((current) => ({ ...current, [draggingNode]: { x: ((event.clientX - rect.left) / rect.width) * 100, y: ((event.clientY - rect.top) / rect.height) * 100 } })); } else if (panStart) { setGraphPan({ x: panStart.originX + ((event.clientX - panStart.x) / rect.width) * 1000, y: panStart.originY + ((event.clientY - panStart.y) / rect.height) * 560 }); } }} onPointerUp={() => { setDraggingNode(null); setPanStart(null); }} onPointerLeave={() => { setDraggingNode(null); setPanStart(null); }}>
+              <g transform={`translate(${graphPan.x} ${graphPan.y}) translate(500 280) scale(${graphScale}) translate(-500 -280)`}>
+              <g stroke="#d4dbe5" strokeWidth="1">
+                {radialNetworkNodes.map((node) => {
+                  const position = getNetworkPosition(node.label);
+                  const parent = node.parent ? getNetworkPosition(node.parent) : { x: 50, y: 50 };
+                  return <line key={`line-${node.label}`} x1={`${parent.x}%`} y1={`${parent.y}%`} x2={`${position.x}%`} y2={`${position.y}%`} />;
+                })}
+              </g>
+              <g>
+                {radialNetworkNodes.map((node) => {
+                  const target = node.caseName ? rows.find((row) => row.label === node.caseName) : undefined;
+                  const position = getNetworkPosition(node.label);
+                  return (
+                    <g key={node.label} className="cursor-grab active:cursor-grabbing" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setDraggingNode(node.label); }} onPointerUp={(event) => { event.stopPropagation(); setDraggingNode(null); }} onClick={(event) => { event.stopPropagation(); if (node.type) setKind(node.type); else if (target) setActiveId(target.id); }}>
+                      <circle cx={`${position.x}%`} cy={`${position.y}%`} r="8" fill={node.color} stroke="white" strokeWidth="2" />
+                      {node.type ? (
+                        <>
+                          <text x={`${position.x}%`} y={`${position.y + 4}%`} textAnchor={position.x < 30 ? "start" : position.x > 70 ? "end" : "middle"} dx={position.x < 30 ? 12 : position.x > 70 ? -12 : 0} className="pointer-events-none fill-[#687589] text-[13px] font-medium">{node.label} · {rows.filter((row) => row.kind === node.type).length}</text>
+                        </>
+                      ) : (
+                        <text x={`${position.x}%`} y={`${position.y + 3}%`} textAnchor={position.x < 30 ? "start" : position.x > 70 ? "end" : "middle"} dx={position.x < 30 ? 8 : position.x > 70 ? -8 : 0} className="fill-[#687589] text-[9px] font-medium">{node.label}</text>
+                      )}
+                    </g>
+                  );
+                })}
+                <g className="cursor-pointer" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setKind("全部类型"); setQuery(""); setStatus("全部状态"); setPage(1); setActiveId(null); }} aria-label="显示全部案例">
+                  <circle cx="50%" cy="50%" r="34" fill="#36b9c8" stroke="white" strokeWidth="5" className="transition-opacity hover:opacity-85" />
+                  <text x="50%" y="48.5%" textAnchor="middle" className="pointer-events-none fill-white text-[22px] font-black">{rows.length}</text>
+                  <text x="50%" y="53%" textAnchor="middle" className="pointer-events-none fill-white text-[10px] font-bold">案例总数</text>
+                </g>
+                </g>
+              </g>
+            </svg>
+            <div className="absolute bottom-3 right-3 flex items-center overflow-hidden rounded-md border border-[#d9e2ee] bg-white/95 shadow-sm">
+              <button type="button" onClick={() => setGraphScale((current) => Math.max(0.65, current - 0.1))} className="grid h-7 w-7 place-items-center text-sm font-black text-[#536b98] hover:bg-[#f2f6fb]">−</button>
+              <button type="button" onClick={() => setGraphScale(1)} className="h-7 min-w-12 border-x border-[#e4eaf2] px-2 text-[9px] font-black text-[#71819a]">{Math.round(graphScale * 100)}%</button>
+              <button type="button" onClick={() => setGraphScale((current) => Math.min(1.8, current + 0.1))} className="grid h-7 w-7 place-items-center text-sm font-black text-[#536b98] hover:bg-[#f2f6fb]">+</button>
+            </div>
+          </section>
+
+          <section className="hidden mt-3 overflow-x-auto rounded-xl border border-[#dfe5ed] bg-white p-4 custom-scrollbar">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-[12px] font-black text-[#344a68]">案例关系图谱</h3>
+              <span className="text-[9px] font-bold text-[#8a98ac]">案例总数 → 类型 → 项目 → 流程</span>
+            </div>
+            <div className="min-w-[820px]">
+              <div className="mb-4 flex justify-center">
+                <button type="button" onClick={() => setKind("全部类型")} className="rounded-full border-4 border-white bg-[#edf2ff] px-5 py-2 text-center shadow-[0_4px_14px_rgba(56,88,145,.16)] outline outline-1 outline-[#b9cceb] transition hover:scale-105">
+                  <strong className="block text-lg font-black text-[#294875]">{rows.length}</strong>
+                  <span className="text-[9px] font-bold text-[#71839f]">案例总数</span>
+                </button>
               </div>
-            ))}
+              <div className="grid grid-cols-3 gap-3">
+                {typeCounts.map(({ type, count, color }) => {
+                  const typeRows = rows.filter((row) => row.kind === type);
+                  return (
+                    <div key={type} className={`rounded-lg border-t-4 bg-[#f8fafd] p-3 ${kind === type ? "border-[#7394ce] shadow-[0_0_0_2px_#dce7fa]" : "border-[#dce5f2]"}`} style={{ borderTopColor: color }}>
+                      <button type="button" onClick={() => setKind(type)} className="flex w-full items-center justify-between text-left">
+                        <span className="flex items-center gap-1.5 text-[10px] font-black text-[#344a68]"><span className="h-2 w-2 rounded-full" style={{ background: color }} />{type}</span>
+                        <span className="text-[10px] font-black text-[#71839f]">{count}</span>
+                      </button>
+                      <div className="mt-3 space-y-2 border-l border-dashed border-[#cbd9ee] pl-3">
+                        {typeRows.map((row) => (
+                          <button type="button" key={row.id} onClick={() => setActiveId(row.id)} className="w-full rounded-md border border-[#e1e7ef] bg-white px-2.5 py-2 text-left transition hover:border-[#9bb3dc] hover:shadow-sm">
+                            <div className="flex items-center justify-between gap-2"><strong className="truncate text-[10px] font-black text-[#3b4e6b]">{row.label}</strong><span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-black ${row.status === "已完成" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{row.status}</span></div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {(flowByCase[row.label] ?? [row.stage]).map((flow, flowIndex) => <span key={flow} className="rounded-full bg-[#f1f5fa] px-1.5 py-0.5 text-[8px] font-bold text-[#74849b]">{flowIndex + 1} {flow}</span>)}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </section>
 
           <section className="mt-3 overflow-hidden rounded-lg border border-[#dfe5ed] bg-white">
@@ -1923,9 +2121,11 @@ function LibraryTagListPanel({
               <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-md border border-[#d7dfeb] px-3">
                 <Search className="h-3.5 w-3.5 text-[#8491a4]" />
                 <input
+                  name="case-library-search"
+                  autoComplete="off"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="搜索编号、标签名称或负责人"
+                  placeholder="搜索案例名称、类型或负责人"
                   className="min-w-0 flex-1 bg-transparent text-[10px] font-bold text-[#43536c] outline-none placeholder:text-[#929dae]"
                 />
               </label>
@@ -1947,7 +2147,7 @@ function LibraryTagListPanel({
                 </label>
               ))}
               <span className="ml-auto text-[9px] font-bold text-[#8794a7]">
-                当前显示 {filtered.length} / 173
+                当前显示 {filtered.length} / {rows.length}
               </span>
             </div>
             {selected.length > 0 && (
@@ -1969,24 +2169,14 @@ function LibraryTagListPanel({
               </div>
             )}
             <div className="overflow-x-auto custom-scrollbar">
-              <div className="min-w-[950px]">
-                <div className="grid grid-cols-[32px_92px_minmax(180px,1.3fr)_100px_100px_105px_110px_90px_105px] items-center gap-3 bg-[#fafbfc] px-4 py-2.5 text-[9px] font-black text-[#7d899b]">
-                  <input
-                    type="checkbox"
-                    checked={
-                      pageRows.length > 0 &&
-                      pageRows.every((row) => selected.includes(row.id))
-                    }
-                    onChange={toggleAll}
-                    className="accent-[#2459c4]"
-                  />
-                  <span>标签编号</span>
-                  <span>标签名称</span>
+              <div className="min-w-0">
+                <div className="grid grid-cols-[minmax(220px,1.5fr)_110px_110px_110px_130px_130px] items-center gap-3 bg-[#fafbfc] px-4 py-2.5 text-[9px] font-black text-[#7d899b]">
+                  <span>案例名称</span>
                   <span>类型</span>
+                  <span>当前阶段</span>
                   <span>状态</span>
-                  <span>当前版本</span>
-                  <span>维护负责人</span>
-                  <span>项目引用</span>
+                  <span className="hidden">负责人</span>
+                  <span>可复用节点</span>
                   <span>最近更新</span>
                 </div>
                 {pageRows.map((row) => (
@@ -1994,37 +2184,12 @@ function LibraryTagListPanel({
                     type="button"
                     key={row.id}
                     onClick={() => setActiveId(row.id)}
-                    className="grid w-full grid-cols-[32px_92px_minmax(180px,1.3fr)_100px_100px_105px_110px_90px_105px] items-center gap-3 border-t border-[#edf0f4] px-4 py-3 text-left hover:bg-[#f7f9fd]"
+                    className="grid w-full grid-cols-[minmax(220px,1.5fr)_110px_110px_110px_130px_130px] items-center gap-3 border-t border-[#edf0f4] px-4 py-3 text-left hover:bg-[#f7f9fd]"
                   >
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(row.id)}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={() =>
-                        setSelected((current) =>
-                          current.includes(row.id)
-                            ? current.filter((id) => id !== row.id)
-                            : [...current, row.id],
-                        )
-                      }
-                      className="accent-[#2459c4]"
-                    />
-                    <span className="font-mono text-[9px] font-black text-[#5d6d84]">
-                      {row.code}
-                    </span>
                     <span>
                       <strong className="block text-[11px] font-black text-[#34445f]">
-                        {row.label.replace(/\s\d+$/, "")}
+                        {row.label}
                       </strong>
-                      <small className="mt-1 block truncate text-[9px] font-bold text-[#8b97a8]">
-                        {row.kind === "风险信号"
-                          ? "识别项目异常并触发审计响应"
-                          : row.kind === "内控测试"
-                            ? "评价关键控制设计与执行有效性"
-                            : row.kind === "审计程序"
-                              ? "形成充分、适当的审计证据"
-                              : "核查法规与制度遵循情况"}
-                      </small>
                     </span>
                     <span
                       className="justify-self-start rounded border px-2 py-1 text-[9px] font-black"
@@ -2036,19 +2201,17 @@ function LibraryTagListPanel({
                     >
                       {row.kind}
                     </span>
+                    <span className="text-[10px] font-bold text-[#65748b]">{row.stage}</span>
                     <span
-                      className={`justify-self-start rounded px-2 py-1 text-[9px] font-black ${row.status === "生效中" ? "bg-emerald-50 text-emerald-700" : row.status === "待复核" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}
+                      className={`justify-self-start rounded px-2 py-1 text-[9px] font-black ${row.status === "已完成" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}
                     >
                       {row.status}
                     </span>
-                    <span className="text-[10px] font-black text-[#53647d]">
-                      {row.version}
-                    </span>
-                    <span className="text-[9px] font-bold text-[#65748b]">
+                    <span className="hidden text-[9px] font-bold text-[#65748b]">
                       {row.owner}
                     </span>
                     <span className="text-[10px] font-black text-[#3f63a5]">
-                      {row.projects} 个
+                      {row.projects}
                     </span>
                     <span className="text-[9px] font-bold text-[#7c899c]">
                       {row.updated}
@@ -2058,7 +2221,7 @@ function LibraryTagListPanel({
               </div>
             </div>
             <footer className="flex items-center justify-between border-t border-[#e7ebf1] px-4 py-3 text-[9px] font-bold text-[#7d899b]">
-              <span>共 {filtered.length} 条结果 · 每页 20 条</span>
+              <span>共 {filtered.length} 条结果 · 当前显示 {pageRows.length} 条</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -2084,15 +2247,16 @@ function LibraryTagListPanel({
           </section>
         </div>
       </main>
-      {active && (
+      {active && <CaseLibraryProjectDetail row={{ id: active.id, label: active.label, kind: active.kind, stage: active.stage, color: active.color, version: active.version, owner: active.owner, projects: active.projects, updated: active.updated, summary: active.label === agentProject?.name ? (agentProject.summary || '暂无项目简介。') : caseSummaries[active.label], flows: flowByCase[active.label], descriptions: active.label === agentProject?.name ? projectDescriptions : flowDescriptions, tasks: active.label === agentProject?.name ? projectTasks : undefined }} onClose={() => setActiveId(null)} onReference={onReference} onDeleteFlow={() => undefined} onDeleteTask={() => undefined} onAddTask={() => undefined} />}
+      {false && active && (
         <aside className="flex w-[270px] shrink-0 flex-col border-l border-[#dce3ed] bg-white shadow-[-6px_0_16px_rgba(40,57,88,.08)]">
           <header className="flex items-start justify-between border-b border-[#e4e8ef] px-4 py-3">
             <div>
               <span className="font-mono text-[8px] font-black text-[#7d899a]">
-                {active.code}
+                {active.kind} · {active.stage}
               </span>
               <h3 className="mt-1 text-[13px] font-black text-[#2f405a]">
-                {active.label.replace(/\s\d+$/, "")}
+                {active.label}
               </h3>
             </div>
             <button
@@ -2113,16 +2277,29 @@ function LibraryTagListPanel({
               {active.kind}
             </span>
             <span className="rounded border border-[#dce3ed] px-2 py-1 text-[8px] font-bold text-[#66758b]">
-              全所标签
+              项目案例
             </span>
           </div>
-          <p className="mt-3 text-[10px] font-bold leading-[1.7] text-[#607089]">该标签由全所方法组统一维护，项目 Scope 命中后进入候选集，并在人工确认后参与项目 DAG 构建。</p>
-          <div className="mt-5"><h4 className="border-b border-[#e7ebf0] pb-2 text-[9px] font-black text-[#586982]">标签状态</h4><div className="mt-3 rounded-md bg-[#f5f7fa] p-3 text-[9px] font-bold leading-relaxed text-[#6d7b90]">该标签尚未进入具体项目，因此没有上下游关系。创建项目后由 Scope 规则筛选并建立 DAG 关系。</div></div>
+          <div className="mt-5"><h4 className="border-b border-[#e7ebf0] pb-2 text-[9px] font-black text-[#586982]">案例信息</h4><div className="mt-3 rounded-md bg-[#f5f7fa] p-3 text-[9px] font-bold leading-[1.8] text-[#6d7b90]">{caseSummaries[active.label] ?? "该案例围绕明确的问题开展研究，通过信息收集、方案验证和阶段评审，形成可复用的项目方法与成果。"}</div></div>
+          <div className="mt-5">
+            <h4 className="border-b border-[#e7ebf0] pb-2 text-[9px] font-black text-[#586982]">节点环节</h4>
+            <div className="mt-3 space-y-2">
+              {(flowByCase[active.label] ?? [active.stage]).map((flow, index) => (
+                <div key={`${flow}-${index}`} className="flex gap-2.5 rounded-md border border-[#e5eaf1] bg-white p-2.5">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#edf3fc] text-[8px] font-black text-[#315ca9]">{index + 1}</span>
+                  <div className="min-w-0">
+                    <strong className="block text-[9px] font-black text-[#40536f]">{flow}</strong>
+                    <p className="mt-1 text-[8px] font-bold leading-relaxed text-[#8491a4]">{flowDescriptions[flow] ?? "记录该节点的关键输入、执行过程、判断依据和阶段产出。"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           <dl className="mt-4 divide-y divide-[#e8ecf1] border-y border-[#e8ecf1] text-[9px]">
             {[
               ["当前版本", active.version],
-              ["维护负责人", active.owner],
-              ["被项目引用", `${active.projects} 个项目`],
+              ["负责人", active.owner],
+              ["可复用节点", active.projects],
               ["最近更新", active.updated],
             ].map(([label, value]) => (
               <div
@@ -2145,10 +2322,10 @@ function LibraryTagListPanel({
             </button>
             <button
               type="button"
-              onClick={() => onReference(`编辑全所标签｜${active.label}`)}
+              onClick={() => onReference(`编辑项目案例｜${active.label}`)}
               className="mt-2 h-8 w-full rounded-md bg-[#315ca9] text-[8px] font-black text-white hover:bg-[#264f96]"
             >
-              编辑标签
+              编辑案例
             </button>
           </div>
           </div>
@@ -2156,6 +2333,108 @@ function LibraryTagListPanel({
       )}
     </div>
   );
+}
+
+function QuestionBasedReviewPanel({ projectId, projectName }: { projectId: string; projectName?: string }) {
+  const [state, setState] = useState<any>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+        const states = Array.isArray(collection) ? collection : [];
+        const currentMatches = current?.projectId === projectId || current?.projectName === projectName || projectId === "current-project";
+        const base = currentMatches ? current : states.find((item: any) => item?.projectId === projectId || item?.projectName === projectName) || current;
+        const messageReviews = readSharedAgentMessages().filter((item: any) => item?.result?.action === "review").map((item: any, index: number) => ({ version: `v${index + 1}`, date: item.createdAt || new Date().toISOString(), result: item.result }));
+        if (messageReviews.length) setState({ ...(base || {}), reviewVersions: messageReviews });
+        else setState(base);
+      } catch { setState(null); }
+    };
+    read();
+    window.addEventListener("roadwise-project-state-updated", read);
+    return () => window.removeEventListener("roadwise-project-state-updated", read);
+  }, [projectId, projectName]);
+  const graph = Array.isArray(state?.graph) ? state.graph : [];
+  const versions = Array.isArray(state?.reviewVersions) && state.reviewVersions.length
+    ? state.reviewVersions
+    : (Array.isArray(state?.reviews) ? state.reviews.map((result: any, index: number) => ({ version: `v${index + 1}`, date: result?.date || new Date().toISOString(), result })) : []);
+  const questions = [
+    ...(Array.isArray(state?.attachments) ? state.attachments.map((item: any) => `用户上传文件：${item.name || "未命名文件"}`) : []),
+    ...(Array.isArray(state?.reviewVersions) && state.reviewVersions.length ? [`评审版本：${state.reviewVersions.at(-1)?.version || `v${state.reviewVersions.length}`}`] : ["评审版本：v1"]),
+    ...(Array.isArray(state?.userQuestions) ? state.userQuestions : []),
+    ...versions.map((version: any) => `评审版本 ${version.version}：${version.result?.message || "已生成评审结果"}`),
+  ];
+  const reviewQuestions = graph.flatMap((node: any, index: number) => [
+    { type: "图谱冲突", stage: node.name || node.label || `阶段${index + 1}`, text: `材料中的目标、对象、时间和指标是否与“${node.name || node.label || `阶段${index + 1}`}”一致？`, action: "逐项核对材料与阶段任务" },
+    { type: "证据缺口", stage: node.name || node.label || `阶段${index + 1}`, text: `“${node.name || node.label || `阶段${index + 1}`}”是否具备足够的样本、方法、原始数据和来源？`, action: "补充证据并建立材料回链" },
+  ]);
+  return <div className="h-full overflow-y-auto bg-[#f8fafc] p-5 custom-scrollbar"><div className="mx-auto max-w-[1180px]"><header className="mb-5 border-b border-[#dfe5ed] pb-4"><h2 className="text-lg font-black text-[#2f405b]">阶段评审</h2><p className="mt-1 text-[11px] font-bold text-[#7b899c]">请逐项回答以下问题，评审结果将形成版本记录</p></header><section className="rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-sm font-black text-[#344761]">评审问题清单</h3><span className="rounded-full bg-[#edf3ff] px-3 py-1 text-[10px] font-black text-[#315ca9]">{reviewQuestions.length} 个问题</span></div><div className="mt-3 divide-y divide-[#edf0f4]">{reviewQuestions.map((item: any, index: number) => <div key={`${item.stage}-${item.type}-${index}`} className="grid gap-3 py-4 md:grid-cols-[70px_150px_1fr_180px] md:items-center"><span className="text-[11px] font-black text-[#7054c6]">Q{String(index + 1).padStart(2, "0")}</span><span className={`w-fit rounded-full px-2 py-1 text-[10px] font-black ${item.type === "图谱冲突" ? "bg-[#fff7e8] text-[#b26b16]" : "bg-[#fff1f2] text-[#b33e4a]"}`}>{item.type}</span><div><strong className="text-[11px] text-[#40536f]">{item.text}</strong><p className="mt-1 text-[10px] text-[#8b99ac]">对应阶段：{item.stage}</p></div><span className="text-[10px] font-bold text-[#315ca9]">建议：{item.action}</span></div>)}{!reviewQuestions.length && <p className="py-5 text-[11px] text-[#9aa6b7]">暂无图谱问题，请先完成项目图谱构建。</p>}</div></section><section className="mt-4 rounded-xl border border-[#dfe5ed] bg-white p-5"><h3 className="text-sm font-black text-[#344761]">用户补充问题</h3><div className="mt-3 divide-y divide-[#edf0f4]">{questions.map((question: string, index: number) => <div key={`${question}-${index}`} className="flex gap-3 py-3 text-[11px] text-[#5f718b]"><span className="font-black text-[#7054c6]">U{String(index + 1).padStart(2, "0")}</span><span>{question}</span></div>)}{!questions.length && <p className="py-3 text-[11px] text-[#9aa6b7]">暂无用户补充问题。</p>}</div></section><div className="mt-4 grid gap-3 md:grid-cols-3"><div className="rounded-lg bg-[#fffaf0] p-4 text-[11px] text-[#80591c]"><strong>核对原则</strong><p className="mt-1">材料事实必须能对应到图谱阶段。</p></div><div className="rounded-lg bg-[#fff5f5] p-4 text-[11px] text-[#8f3c45]"><strong>证据要求</strong><p className="mt-1">结论需要样本、方法、时间和来源。</p></div><div className="rounded-lg bg-[#f3f8ff] p-4 text-[11px] text-[#315c91]"><strong>输出方式</strong><p className="mt-1">每次补充材料后生成新的评审版本。</p></div></div></div></div>;
+}
+
+function StructuredAgentReviewPanel({ projectId, projectName }: { projectId: string; projectName?: string }) {
+  const [state, setState] = useState<any>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+        const states = Array.isArray(collection) ? collection : [];
+        setState(states.find((item: any) => item?.projectId === projectId || item?.projectName === projectName) || current);
+      } catch { setState(null); }
+    };
+    read();
+    window.addEventListener("roadwise-project-state-updated", read);
+    return () => window.removeEventListener("roadwise-project-state-updated", read);
+  }, [projectId, projectName]);
+  const materials = Array.isArray(state?.attachments) ? state.attachments : [];
+  const questions = Array.isArray(state?.userQuestions) ? state.userQuestions : [];
+  const graph = Array.isArray(state?.graph) ? state.graph : [];
+  const text = String(state?.materialAnalysis || state?.summary || "暂无分析");
+  const points = text.split(/(?<=[。！？；])\s*/).map((item) => item.trim()).filter(Boolean).slice(0, 8);
+  const versions = Array.isArray(state?.reviewVersions) ? state.reviewVersions : [];
+  const openPreview = (item: any) => item?.dataUrl && window.open(item.dataUrl, "_blank", "noopener,noreferrer");
+  return <div className="h-full overflow-y-auto bg-[#f8fafc] p-5 custom-scrollbar"><div className="mx-auto max-w-[1180px]">
+    <header className="mb-5 border-b border-[#dfe5ed] pb-4"><h2 className="text-lg font-black text-[#2f405b]">阶段评审</h2><p className="mt-1 text-[11px] font-bold text-[#7b899c]">基于材料、用户问题与当前知识图谱的结构化核对</p></header>
+    <section className="rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><div><h3 className="text-sm font-black text-[#344761]">评审结论</h3><p className="mt-1 text-[10px] text-[#8b99ac]">当前版本 · {versions.at(-1)?.version || "v1"}</p></div><span className="rounded-full bg-[#fff7e8] px-3 py-1 text-[10px] font-black text-[#b26b16]">待补充证据</span></div><div className="mt-4 grid gap-2 md:grid-cols-2">{points.map((point, index) => <div key={`${point}-${index}`} className="rounded-lg bg-[#f7f9fc] p-3 text-[11px] leading-5 text-[#5f718b]"><span className="mr-2 font-black text-[#7054c6]">{String(index + 1).padStart(2, "0")}</span>{point}</div>)}</div></section>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2"><section className="rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-sm font-black text-[#344761]">材料与证据</h3><span className="text-[10px] font-bold text-[#8b99ac]">{materials.length} 份</span></div><div className="mt-3 space-y-2">{materials.map((item: any, index: number) => <div key={`${item.name}-${index}`} className="rounded-lg bg-[#f5f7fa] p-3"><div className="flex items-center justify-between gap-2 text-[11px] font-bold text-[#52647b]"><span className="truncate">📎 {item.name || "未命名材料"}</span>{item.dataUrl && <button type="button" onClick={() => openPreview(item)} className="shrink-0 text-[10px] font-black text-[#315ca9]">打开预览</button>}</div>{item.summary && <p className="mt-2 text-[10px] leading-5 text-[#718198]">{item.summary}</p>}</div>)}</div></section><section className="rounded-xl border border-[#dfe5ed] bg-white p-5"><h3 className="text-sm font-black text-[#344761]">用户问题</h3><div className="mt-3 space-y-2">{questions.map((question: string, index: number) => <div key={`${question}-${index}`} className="rounded-lg border-l-4 border-[#7054c6] bg-[#f8f6ff] px-3 py-2 text-[11px] leading-5 text-[#5f718b]">{question}</div>)}{!questions.length && <p className="text-[11px] text-[#9aa6b7]">暂无问题记录</p>}</div></section></div>
+    <section className="mt-4 rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-sm font-black text-[#344761]">图谱一致性检查</h3><span className="rounded-full bg-[#edf3ff] px-3 py-1 text-[10px] font-black text-[#315ca9]">{graph.length} 个阶段</span></div><div className="mt-3 grid gap-3 md:grid-cols-3">{graph.map((node: any, index: number) => <div key={`${node.name}-${index}`} className="rounded-lg border border-[#e8edf4] p-3"><h4 className="text-[11px] font-black text-[#40536f]">{index + 1}. {node.name || node.label || "未命名阶段"}</h4><p className="mt-2 text-[10px] leading-5 text-[#718198]">{node.description || "缺少阶段说明"}</p><strong className="mt-2 block text-[10px] text-[#315ca9]">{Array.isArray(node.tasks) ? node.tasks.length : 0} 项任务</strong></div>)}</div></section>
+    <div className="mt-4 grid gap-3 md:grid-cols-3"><div className="rounded-xl border-l-4 border-[#d9901f] bg-[#fffaf0] p-4"><h3 className="text-[12px] font-black text-[#80591c]">潜在冲突</h3><p className="mt-2 text-[10px] leading-5 text-[#80591c]">核对材料中的目标、对象、时间和指标是否与图谱一致。</p></div><div className="rounded-xl border-l-4 border-[#d94d5b] bg-[#fff5f5] p-4"><h3 className="text-[12px] font-black text-[#8f3c45]">证据缺口</h3><p className="mt-2 text-[10px] leading-5 text-[#8f3c45]">补充样本量、研究方法、时间范围、原始数据和来源。</p></div><div className="rounded-xl border-l-4 border-[#4b90d9] bg-[#f3f8ff] p-4"><h3 className="text-[12px] font-black text-[#315c91]">建议行动</h3><p className="mt-2 text-[10px] leading-5 text-[#315c91]">为每个阶段补充验收条件，并将证据回链到对应材料。</p></div></div>
+  </div></div>;
+}
+
+function AgentProjectReviewPanel({ projectId, projectName }: { projectId: string; projectName?: string }) {
+  const [state, setState] = useState<any>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+        const states = Array.isArray(collection) ? collection : [];
+        setState(states.find((item: any) => item?.projectId === projectId || item?.projectName === projectName) || (current?.projectId === projectId || current?.projectName === projectName || projectId === "current-project" ? current : null));
+      } catch { setState(null); }
+    };
+    read();
+    window.addEventListener("roadwise-project-state-updated", read);
+    return () => window.removeEventListener("roadwise-project-state-updated", read);
+  }, [projectId, projectName]);
+  const versions = Array.isArray(state?.reviewVersions) ? state.reviewVersions : [];
+  const materials = Array.isArray(state?.attachments) ? state.attachments : [];
+  const questions = Array.isArray(state?.userQuestions) ? state.userQuestions : [];
+  const graph = Array.isArray(state?.graph) ? state.graph : [];
+  const analysisText = state?.materialAnalysis || state?.summary || "暂无评审分析，请先上传材料并提出问题。";
+  const analysisPoints = String(analysisText).split(/(?<=[。！？；])\s*/).map((item) => item.trim()).filter(Boolean).slice(0, 6);
+  const previewMaterial = (item: any) => { if (item?.dataUrl) window.open(item.dataUrl, "_blank", "noopener,noreferrer"); };
+  return <div className="h-full overflow-y-auto bg-[#f8fafc] p-4 custom-scrollbar"><div className="mx-auto max-w-[1180px]">
+    <header className="border-b border-[#dfe5ed] pb-4"><h2 className="text-base font-black text-[#2f405b]">阶段评审</h2><p className="mt-1 text-[11px] font-bold text-[#75839a]">基于当前已提供材料与用户问题生成的评审记录</p></header>
+    <section className="mt-4 rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><div><h3 className="text-[14px] font-black text-[#344761]">当前评审摘要</h3><p className="mt-1 text-[10px] font-bold text-[#8b99ac]">材料理解 · 图谱核对 · 风险与行动</p></div><span className="rounded-full bg-[#eee8ff] px-2.5 py-1 text-[10px] font-black text-[#7054c6]">{versions.at(-1)?.version || "v1"}</span></div><p className="mt-4 line-clamp-4 whitespace-pre-wrap text-[12px] leading-6 text-[#5f718b]">{state?.materialAnalysis || state?.summary || "暂无评审分析，请先上传材料并提出问题。"}</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-lg bg-[#f5f8ff] px-3 py-2"><span className="text-[10px] font-bold text-[#8494ad]">材料</span><strong className="mt-1 block text-[16px] text-[#315ca9]">{materials.length} 份</strong></div><div className="rounded-lg bg-[#fff9ef] px-3 py-2"><span className="text-[10px] font-bold text-[#a28a68]">待核对</span><strong className="mt-1 block text-[16px] text-[#b26b16]">{questions.length + 1} 项</strong></div><div className="rounded-lg bg-[#f5f7fa] px-3 py-2"><span className="text-[10px] font-bold text-[#8494ad]">图谱阶段</span><strong className="mt-1 block text-[16px] text-[#53647d]">{graph.length} 个</strong></div></div><p className="mt-3 text-[10px] font-bold text-[#9aa6b7]">评审时间：{versions.at(-1)?.date ? new Date(versions.at(-1).date).toLocaleString("zh-CN") : "尚未生成"}</p></section>
+    <section className="mt-4 grid gap-4 lg:grid-cols-2"><div className="rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-[13px] font-black text-[#344761]">输入材料与证据</h3><span className="text-[10px] font-bold text-[#8b99ac]">{materials.length} 份</span></div><div className="mt-3 space-y-2">{materials.length ? materials.map((item: any, index: number) => <div key={`${item.name}-${index}`} className="rounded-lg bg-[#f5f7fa] px-3 py-2 text-[11px] font-bold text-[#61728a]"><div className="flex items-center justify-between gap-2"><span className="truncate">📎 {item.name || "未命名材料"}</span>{item.dataUrl && <button type="button" onClick={() => previewMaterial(item)} className="shrink-0 text-[10px] font-black text-[#315ca9]">打开预览</button>}</div>{item.summary && <p className="mt-1 line-clamp-3 font-normal leading-5">{item.summary}</p>}</div>) : <p className="mt-3 text-[11px] text-[#9aa6b7]">暂无材料记录</p>}</div></div><div className="rounded-xl border border-[#dfe5ed] bg-white p-5"><h3 className="text-[13px] font-black text-[#344761]">用户问题与待核对事项</h3><ul className="mt-3 space-y-2 text-[11px] leading-5 text-[#61728a]">{questions.length ? questions.map((question: string, index: number) => <li key={`${question}-${index}`} className="line-clamp-2 border-b border-[#eef1f5] pb-2">{question}</li>) : <li className="text-[#9aa6b7]">暂无问题记录</li>}<li className="border-t border-[#eef1f5] pt-2 font-bold text-[#c07a21]">需继续核对：样本量、研究时间、指标口径和结论证据是否完整</li></ul></div></section>
+    <section className="mt-4 rounded-xl border border-[#dfe5ed] bg-white p-5"><div className="flex items-center justify-between"><h3 className="text-[13px] font-black text-[#344761]">图谱一致性与缺口</h3><span className="rounded-full bg-[#fff7e8] px-2.5 py-1 text-[10px] font-black text-[#b26b16]">{graph.length} 个阶段</span></div><div className="mt-3 grid gap-3 md:grid-cols-3">{graph.slice(0, 3).map((node: any, index: number) => <div key={`${node.name}-${index}`} className="rounded-lg bg-[#f8fafc] p-3"><strong className="text-[11px] text-[#40536f]">{index + 1}. {node.name || node.label || "未命名阶段"}</strong><p className="mt-2 line-clamp-4 text-[10px] leading-5 text-[#718198]">{node.description || "暂无阶段说明，需要补充目标、证据和验收标准。"}</p><p className="mt-2 text-[10px] font-bold text-[#315ca9]">任务 {Array.isArray(node.tasks) ? node.tasks.length : 0} 项</p></div>)}{!graph.length && <p className="text-[11px] text-[#9aa6b7]">尚未形成图谱，无法进行一致性核对。</p>}</div><div className="mt-4 grid gap-3 md:grid-cols-3"><div className="rounded-lg border-l-4 border-[#d9901f] bg-[#fffaf0] p-3 text-[11px] leading-5 text-[#80591c]"><strong>潜在冲突</strong><br/>检查材料中的目标、对象、时间和指标是否与图谱阶段一致。</div><div className="rounded-lg border-l-4 border-[#d94d5b] bg-[#fff5f5] p-3 text-[11px] leading-5 text-[#8f3c45]"><strong>证据缺口</strong><br/>当前材料若未提供样本、方法、时间或原始数据，结论不能直接验收。</div><div className="rounded-lg border-l-4 border-[#4b90d9] bg-[#f3f8ff] p-3 text-[11px] leading-5 text-[#315c91]"><strong>建议行动</strong><br/>补充缺失材料、标注来源，并为每个阶段补充明确验收条件。</div></div></section>
+    <section className="mt-4 rounded-xl border border-[#dfe5ed] bg-white p-5"><h3 className="text-[13px] font-black text-[#344761]">版本记录</h3><div className="mt-3 space-y-2">{versions.length ? versions.map((version: any) => <div key={`${version.version}-${version.date}`} className="flex items-start justify-between gap-4 rounded-lg bg-[#f8fafc] px-3 py-2 text-[11px]"><span className="font-black text-[#7054c6]">{version.version}</span><span className="flex-1 text-[#61728a]">{version.result?.message || "已生成阶段评审结果"}</span><time className="shrink-0 text-[#9aa6b7]">{new Date(version.date).toLocaleDateString("zh-CN")}</time></div>) : <p className="text-[11px] text-[#9aa6b7]">补充材料并再次提问后，将自动生成新版本。</p>}</div></section>
+  </div></div>;
+}
+
+function ExampleProjectReviewPanel({ projectName }: { projectName?: string }) {
+  return <div className="h-full overflow-y-auto bg-[#f8fafc] p-4 custom-scrollbar"><div className="mx-auto max-w-[1180px]"><header className="border-b border-[#dfe5ed] pb-4"><h2 className="text-base font-black text-[#2f405b]">阶段评审</h2></header><section className="mt-5 rounded-xl border border-[#dfe5ed] bg-white p-8 text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#edf2ff] text-xl text-[#315ca9]">i</div><h3 className="mt-4 text-[15px] font-black text-[#344761]">{projectName || "该项目"}为示例项目</h3><p className="mt-2 text-[11px] font-bold leading-6 text-[#7b899c]">该项目用于展示项目案例库的流程和图谱示例，无需录入评审材料。</p><p className="mt-4 text-[11px] font-black text-[#315ca9]">前往具体项目查看</p></section></div></div>;
 }
 
 function GraphWorkspacePanel({
@@ -2175,6 +2454,8 @@ function GraphWorkspacePanel({
   materialRequests,
   setMaterialRequests,
   projectId,
+  projectName,
+  libraryMode = false,
   onOpenDownstream,
   onHandoffDownstream,
   downstreamProgressByProject,
@@ -2201,6 +2482,8 @@ function GraphWorkspacePanel({
   materialRequests: AuditMaterialRequestMap;
   setMaterialRequests: React.Dispatch<React.SetStateAction<AuditMaterialRequestMap>>;
   projectId: string;
+  projectName?: string;
+  libraryMode?: boolean;
   onOpenDownstream: (projectId: string) => void;
   onHandoffDownstream: (projectId: string) => void;
   downstreamProgressByProject: Record<string, number>;
@@ -2209,6 +2492,16 @@ function GraphWorkspacePanel({
   decisionDetails?: Record<string, CandidateDecisionRecord>;
   onSaveDecision?: (id: string, decision: CandidateDecisionRecord) => void;
 }) {
+  if (tab === "execution") {
+    try {
+      if (libraryMode) return <ExampleProjectReviewPanel projectName="项目案例库" />;
+      const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+      const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+      const state = (Array.isArray(collection) ? collection : []).find((item: any) => item?.projectId === projectId || item?.projectName === projectName) || (current?.projectId === projectId || current?.projectName === projectName || projectId === "current-project" ? current : null);
+      if (["audit-handoff", "huadong", "xincheng"].includes(projectId)) return <ExampleProjectReviewPanel projectName={projectName} />;
+      if (state?.projectName) return <QuestionBasedReviewPanel projectId={projectId} projectName={projectName} />;
+    } catch { /* use the standard review panel when no agent project exists */ }
+  }
   const candidates: AuditRule[] = candidateNodes.map((node, index) => {
     const type: RuleType =
       node.kind === "风险信号" || node.kind === "复合风险"
@@ -2593,9 +2886,6 @@ function GraphWorkspacePanel({
               <h2 className="text-base font-black text-[#2f405b]">
                 项目准备审核
               </h2>
-              <p className="mt-1 text-[10px] font-bold text-[#75839a]">
-                先确认重要性参数，再审核 Scope 生成的候选标注。
-              </p>
             </div>
           </header>
           {!materialityConfirmed ? (
@@ -2610,9 +2900,6 @@ function GraphWorkspacePanel({
                   <h3 className="text-xs font-black text-[#364760]">
                     候选标注集审核
                   </h3>
-                  <p className="mt-1 text-[9px] font-bold text-[#74839a]">
-                    共 {candidates.length} 条候选标注，与候选图谱及 DAG 节点保持一致；候选标签默认纳入，仅在需要时调整或排除。
-                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {!projectGraphReady && (
@@ -2654,7 +2941,6 @@ function GraphWorkspacePanel({
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                       <h4 className="text-[11px] font-black text-[#354760]">从全所标签池添加</h4>
-                      <p className="mt-1 text-[8px] font-bold text-[#66758a]">人工补充的标签将与 Scope 候选集一起进入图谱和后续 DAG。</p>
                     </div>
                     <div className="flex min-w-0 flex-1 gap-2 lg:max-w-[520px]">
                       <input
@@ -2712,7 +2998,7 @@ function GraphWorkspacePanel({
                               className="h-3.5 w-3.5 accent-[#315ca9] disabled:cursor-not-allowed"
                             />
                             <span className="font-mono text-[9px] font-black text-[#5a6a83]">{formatTagCode(node.id)}</span>
-                            <span className="min-w-0 pr-3"><strong className="block truncate text-[9px] font-black text-[#33445f]">{node.label}</strong><small className="mt-0.5 block truncate text-[7px] font-bold text-[#8793a5]">识别项目异常并触发审计响应</small></span>
+                            <span className="min-w-0 pr-3"><strong className="block truncate text-[9px] font-black text-[#33445f]">{node.label}</strong></span>
                             <span className="justify-self-start rounded border px-2 py-1 text-[8px] font-black" style={{ color: node.color, borderColor: `${node.color}55`, background: `${node.color}10` }}>{node.kind}</span>
                             {alreadyAdded ? <span className="justify-self-start rounded bg-[#eef1f5] px-2 py-1 text-[8px] font-black text-[#68768a]">已加入</span> : <span className="justify-self-start rounded bg-[#eaf8f2] px-2 py-1 text-[8px] font-black text-[#16765a]">生效中</span>}
                             <span className="text-[9px] font-black text-[#506078]">{version}</span>
@@ -3125,22 +3411,21 @@ function GraphWorkspacePanel({
       <div className="h-full overflow-y-auto bg-[#f8fafc] p-4 custom-scrollbar">
         <div className="mx-auto max-w-[1180px]">
           <header>
-            <h2 className="text-base font-black text-[#2f405b]">审核工作台</h2>
+            <h2 className="text-base font-black text-[#2f405b]">阶段评审工作台</h2>
             <p className="mt-1 text-[11px] font-bold text-[#75839a]">
-              当前项目尚未启动
-              DAG，因此还没有执行期人工复核或补充资料待办。
+              当前项目还没有完成阶段材料检查，因此暂时没有负责人确认或材料补充待办。
             </p>
           </header>
           <div className="mt-4 border-y border-[#dfe5ed] bg-white px-5 py-8">
             <strong className="text-[13px] font-black text-[#3d4e68]">
               {materialityConfirmed
-                ? "候选标注集正在审核"
-                : "重要性参数尚未确认"}
+                ? "阶段材料正在检查"
+                : "项目阶段尚未准备完成"}
             </strong>
             <p className="mt-2 text-[10px] font-bold text-[#74839a]">
               {materialityConfirmed
-                ? "请先完成候选标签的调整与排除确认，冻结候选集并启动 DAG 后，人工待办将在这里生成。"
-                : "请先在列表视图完成重要性参数确认，再执行 Scope 筛选和候选标注集审核。"}
+                ? "请先完成材料上传与 Roadwise Agent 诊断，阶段评审事项将在这里生成。"
+                : "请先在阶段工作台补充目标、任务和必交材料，再进入阶段评审。"}
             </p>
           </div>
         </div>
@@ -3162,11 +3447,14 @@ function GraphWorkspacePanel({
       cc1: "CC-REL-001",
     };
     const reviewableTagKinds = new Set([
-      "风险信号",
-      "复合风险",
-      "内控测试",
-      "审计程序",
-      "合规检查",
+      "问题",
+      "风险",
+      "任务",
+      "材料",
+      "证据",
+      "成果",
+      "评审",
+      "决策",
     ]);
     const layerTaskNodes = graphStudioNodes.filter(
       (node) => reviewableTagKinds.has(node.kind),
@@ -3353,14 +3641,14 @@ function GraphWorkspacePanel({
           <header>
             <h2 className="text-base font-black text-[#2f405b]">审核工作台</h2>
             <p className="mt-1 text-[11px] font-bold text-[#75839a]">
-              所有异常事项均保留，统一挂接到最终 AP/CC 节点；问题、缺失材料及 RS → CT → AP/CC 关系由知识图谱推导。
+              所有需要关注的事项都会保留，统一挂接到阶段评审；问题、缺失材料和下一步行动由项目知识图谱推导。
             </p>
           </header>
           <div className="mt-4 flex items-center gap-1 border-y border-[#e0e5ec] bg-white px-3 py-1.5 text-[10px] font-bold text-[#718097]">
             {(
               [
-                ["review", "待人工复核", String(reviewTaskCount)],
-                ["material", "待补充资料", String(materialTaskCount)],
+                ["review", "待负责人确认", String(reviewTaskCount)],
+                ["material", "待补充材料", String(materialTaskCount)],
               ] as const
             ).map(([filter, label, count]) => (
               <button
@@ -3372,15 +3660,14 @@ function GraphWorkspacePanel({
                 {label} {count}
               </button>
             ))}
-            <span className="ml-auto">全部人工事项 {layerTaskNodes.length}</span>
+            <span className="ml-auto">全部待处理事项 {layerTaskNodes.length}</span>
           </div>
           <section className="mt-3 overflow-hidden rounded-lg border border-[#dfe5ed] bg-white">
-            <div className="grid grid-cols-[96px_minmax(150px,1fr)_100px_130px_120px_130px] gap-4 bg-[#fafbfc] px-4 py-3 text-[10px] font-black text-[#68768a]">
-              <span>AP / CC 节点编号</span>
+            <div className="grid grid-cols-[minmax(180px,1.3fr)_100px_150px_140px_130px] gap-4 bg-[#fafbfc] px-4 py-3 text-[10px] font-black text-[#68768a]">
               <span>待办事项</span>
               <span>负责人</span>
-              <span>触发 / 调参 / 追溯</span>
-              <span>资料状态</span>
+              <span>来源 / 影响</span>
+              <span>材料状态</span>
               <span>处理</span>
             </div>
             {taskNodes.map((node, index) => {
@@ -3400,11 +3687,8 @@ function GraphWorkspacePanel({
                 <React.Fragment key={node.id}>
                 <div
                   key={node.id}
-                  className="grid grid-cols-[96px_minmax(150px,1fr)_100px_130px_120px_130px] items-center gap-4 border-t border-[#edf0f4] px-4 py-3"
+                  className="grid grid-cols-[minmax(180px,1.3fr)_100px_150px_140px_130px] items-center gap-4 border-t border-[#edf0f4] px-4 py-3"
                 >
-                  <span className="truncate font-mono text-[9px] font-black text-[#596a83]">
-                    {taskNodeCode[node.id] ?? node.id.toUpperCase()}
-                  </span>
                   <span>
                     <strong className="block text-[11px] font-black text-[#35455f]">
                       {node.label}
@@ -3835,8 +4119,8 @@ function GraphWorkspacePanel({
 const graphStudioNodes = [
   {
     id: "scope",
-    label: "项目 Scope",
-    kind: "项目配置",
+    label: "项目目标",
+    kind: "目标",
     x: 48,
     y: 280,
     r: 25,
@@ -3844,8 +4128,8 @@ const graphStudioNodes = [
   },
   {
     id: "rs1",
-    label: "收入异常",
-    kind: "风险信号",
+    label: "真实问题",
+    kind: "问题",
     x: 220,
     y: 80,
     r: 23,
@@ -3853,8 +4137,8 @@ const graphStudioNodes = [
   },
   {
     id: "rs2",
-    label: "账龄恶化",
-    kind: "风险信号",
+    label: "用户证据",
+    kind: "证据",
     x: 235,
     y: 178,
     r: 19,
@@ -3862,8 +4146,8 @@ const graphStudioNodes = [
   },
   {
     id: "rs3",
-    label: "存货增长",
-    kind: "风险信号",
+    label: "访谈材料",
+    kind: "材料",
     x: 205,
     y: 370,
     r: 21,
@@ -3871,8 +4155,8 @@ const graphStudioNodes = [
   },
   {
     id: "rs4",
-    label: "资金异常",
-    kind: "风险信号",
+    label: "验证风险",
+    kind: "风险",
     x: 245,
     y: 505,
     r: 18,
@@ -3880,8 +4164,8 @@ const graphStudioNodes = [
   },
   {
     id: "and1",
-    label: "虚增收入",
-    kind: "复合风险",
+    label: "核心假设",
+    kind: "决策",
     x: 390,
     y: 108,
     r: 26,
@@ -3889,8 +4173,8 @@ const graphStudioNodes = [
   },
   {
     id: "ct1",
-    label: "出货审批",
-    kind: "内控测试",
+    label: "访谈任务",
+    kind: "任务",
     x: 405,
     y: 285,
     r: 21,
@@ -3898,8 +4182,8 @@ const graphStudioNodes = [
   },
   {
     id: "ct2",
-    label: "盘点控制",
-    kind: "内控测试",
+    label: "竞品调研",
+    kind: "任务",
     x: 380,
     y: 455,
     r: 19,
@@ -3907,8 +4191,8 @@ const graphStudioNodes = [
   },
   {
     id: "ap1",
-    label: "截止测试",
-    kind: "审计程序",
+    label: "需求验证",
+    kind: "任务",
     x: 570,
     y: 80,
     r: 22,
@@ -3916,8 +4200,8 @@ const graphStudioNodes = [
   },
   {
     id: "ap2",
-    label: "三单一致",
-    kind: "审计程序",
+    label: "原型测试",
+    kind: "成果",
     x: 605,
     y: 170,
     r: 18,
@@ -3925,8 +4209,8 @@ const graphStudioNodes = [
   },
   {
     id: "ap3",
-    label: "应收函证",
-    kind: "审计程序",
+    label: "用户反馈",
+    kind: "证据",
     x: 560,
     y: 300,
     r: 24,
@@ -3934,8 +4218,8 @@ const graphStudioNodes = [
   },
   {
     id: "ap4",
-    label: "存货监盘",
-    kind: "审计程序",
+    label: "实验结果",
+    kind: "成果",
     x: 590,
     y: 440,
     r: 21,
@@ -3943,8 +4227,8 @@ const graphStudioNodes = [
   },
   {
     id: "cc1",
-    label: "关联披露",
-    kind: "合规检查",
+    label: "阶段评审",
+    kind: "评审",
     x: 515,
     y: 510,
     r: 19,
@@ -3952,8 +4236,8 @@ const graphStudioNodes = [
   },
   {
     id: "human",
-    label: "CPA 确认",
-    kind: "人工节点",
+    label: "负责人确认",
+    kind: "评审",
     x: 730,
     y: 135,
     r: 27,
@@ -3961,8 +4245,8 @@ const graphStudioNodes = [
   },
   {
     id: "evidence",
-    label: "审计证据",
-    kind: "执行结果",
+    label: "项目成果",
+    kind: "成果",
     x: 730,
     y: 330,
     r: 23,
@@ -3970,8 +4254,8 @@ const graphStudioNodes = [
   },
   {
     id: "complete",
-    label: "完成结论",
-    kind: "完成阶段",
+    label: "下一步行动",
+    kind: "行动",
     x: 730,
     y: 505,
     r: 25,
@@ -4182,7 +4466,7 @@ function KnowledgeGraphStudio({ onAgent }: { onAgent: () => void }) {
         <header className="absolute inset-x-0 top-0 z-20 flex h-12 items-center justify-between border-b border-[#e7ebf0] bg-white/95 px-3">
           <div>
             <h2 className="text-[10px] font-black text-[#2f405c]">
-              项目知识图谱
+              知识图谱
             </h2>
             <p className="mt-0.5 text-[7px] font-bold text-[#929dae]">
               华东智造有限公司2026年度审计
@@ -4383,7 +4667,7 @@ function KnowledgeGraphStudio({ onAgent }: { onAgent: () => void }) {
           <div className="rounded-lg bg-[#f0f4fb] p-3">
             <div className="flex items-center gap-1.5 text-[8px] font-black text-[#405f99]">
               <Bot className="h-3.5 w-3.5" />
-              图谱检索 Agent
+              RoadwiseLab推出的Agent
             </div>
             <p className="mt-2 text-[8px] font-bold leading-relaxed text-[#63738c]">
               该节点由两条风险信号共同构成，建议保留并提交 CPA 确认。
@@ -4416,6 +4700,181 @@ function KnowledgeGraphStudio({ onAgent }: { onAgent: () => void }) {
   );
 }
 
+function CaseLibraryGraphView({
+  projects,
+  sidebarProjects = projects,
+  onNewProject,
+  hideSidebar = false,
+  selectedProjectId,
+  onSelectProject,
+}: {
+  projects: Array<{ id: string; name: string; client: string }>;
+  sidebarProjects?: Array<{ id: string; name: string; client: string }>;
+  onNewProject?: () => void;
+  hideSidebar?: boolean;
+  selectedProjectId?: string;
+  onSelectProject?: (id: string) => void;
+}) {
+  const [selected, setSelected] = useState("all");
+  const [sidebarQuery, setSidebarQuery] = useState("");
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [projectQuery, setProjectQuery] = useState("");
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  const dragging = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+  const nodeDragging = useRef<{ key: string; x: number; y: number } | null>(null);
+  const flows: Record<string, { id: string; label: string; kind: string }[]> = {
+    "audit-handoff": [
+      { id: "market", label: "市场规模\n商圈客流与座位需求", kind: "问题" },
+      { id: "observe", label: "场景观察\n4 家自习室实地观察", kind: "证据" },
+      { id: "profile", label: "用户画像\n备考学生与自由职业者", kind: "材料" },
+      { id: "experiment", label: "方案实验\n预约流程 A/B 测试", kind: "任务" },
+      { id: "conversion", label: "转化验证\n预约转化率 ≥10%", kind: "成果" },
+      { id: "review", label: "阶段复盘\n决定扩大试点", kind: "评审" },
+    ],
+    huadong: [
+      { id: "goal", label: "目标与假设\n验证用户是否愿意结构化使用 Roadwise", kind: "目标" },
+      { id: "interview", label: "用户访谈\n半结构化访谈 12 人，覆盖学生与独立创作者", kind: "问题" },
+      { id: "survey", label: "问卷数据\n线上问卷 N=86，有效样本 79 份", kind: "证据" },
+      { id: "priority", label: "需求优先级\n采用 RICE 评分排序需求", kind: "任务" },
+      { id: "mvp", label: "MVP验证\n上线 2 周，跟踪激活率与任务完成率", kind: "成果" },
+      { id: "review", label: "阶段复盘\n确认假设成立并调整方案", kind: "评审" },
+    ],
+    xincheng: [
+      { id: "goal", label: "流程目标\n立项到复盘平均周期压缩至 14 天", kind: "目标" },
+      { id: "baseline", label: "现状基线\n盘点耗时、返工与材料缺失点", kind: "问题" },
+      { id: "sources", label: "信息源接入\n文档、访谈、问卷与会议纪要", kind: "证据" },
+      { id: "metrics", label: "指标口径\n统一完成率、完整率与评审标准", kind: "任务" },
+      { id: "pilot", label: "SOP试运行\n选择 3 个真实项目试运行两周", kind: "成果" },
+      { id: "review", label: "质量复盘\n保留有效步骤并输出变更记录", kind: "评审" },
+    ],
+  };
+  const activeSelection = selectedProjectId ?? selected;
+  const flowSteps: Record<string, Record<string, string[]>> = {
+    "audit-handoff": { market: ["统计商圈客流", "分析地图热力", "估算首批市场容量"], observe: ["观察入场时段", "记录座位偏好", "统计高峰期占座率"], profile: ["建立用户画像", "整理核心任务", "确认付费触发点"], experiment: ["设计预约方案", "运行 A/B 测试", "记录到店转化"], conversion: ["跟踪预约漏斗", "验证到店率", "测算月卡续费率"], review: ["对比验证数据", "确认关键假设", "决定下一轮投入"] },
+    huadong: {
+      goal: ["明确三类目标用户", "验证持续使用意愿", "定义完成率提升 20%", "建立假设验证表"],
+      interview: ["招募 12 名用户", "完成项目背景访谈", "追问推进卡点与替代方案", "展示 Roadwise 流程做概念测试", "整理用户画像与问题标签"],
+      survey: ["设计用户基本信息模块", "收集项目执行现状评分", "测试 Roadwise 功能需求", "统计价格接受区间", "清洗无效样本并输出分析"],
+      priority: ["建立 12 项功能池", "计算 RICE 评分", "确定 MVP 首版范围", "列出暂不开发功能", "输出产品需求与用户流程"],
+      mvp: ["招募 20—30 名测试用户", "创建项目并输入目标", "生成阶段与首个任务", "记录激活、完成与留存指标", "在第 3/7/14 天收集反馈"],
+      review: ["对比验证前后数据", "逐条判断核心假设", "分类产品/用户/运营/商业问题", "按指标决定继续或调整", "输出 MVP 验证报告"]
+    },
+    xincheng: { goal: ["梳理立项流程", "测算项目周期", "设定材料完整率"], baseline: ["盘点项目耗时", "统计返工次数", "记录材料缺失点"], sources: ["接入项目文档", "接入访谈与问卷", "建立结论溯源"], metrics: ["统一完成率口径", "统一材料完整率", "统一评审标准"], pilot: ["选择试运行项目", "记录流程卡点", "统计 Agent 采纳率"], review: ["对比试运行指标", "删除低价值步骤", "输出 SOP 变更记录"] },
+  };
+  const chooseProject = (id: string) => { setSelected(id); onSelectProject?.(id); };
+  const selectedProjects = activeSelection === "all" ? projects : projects.filter((p) => p.id === activeSelection);
+  const isAllView = selectedProjects.length > 1;
+  const fitCanvas = () => {
+    const nextScale = isAllView ? 0.82 : 0.85;
+    const bounds = isAllView
+      ? { minX: 100, maxX: 1400, minY: 40, maxY: 2800 }
+      : { minX: 0, maxX: 1300, minY: 70, maxY: 1150 };
+    const canvasHeight = isAllView ? 2800 : 800;
+    setScale(nextScale);
+    setPan({
+      x: (1500 - (bounds.maxX - bounds.minX) * nextScale) / 2 - bounds.minX * nextScale,
+      y: (canvasHeight - (bounds.maxY - bounds.minY) * nextScale) / 2 - bounds.minY * nextScale,
+    });
+  };
+  const zoomCanvas = (nextScale: number) => {
+    const bounded = Math.min(2, Math.max(0.35, nextScale));
+    const center = { x: 750, y: 550 };
+    const ratio = bounded / scale;
+    setPan({ x: center.x - (center.x - pan.x) * ratio, y: center.y - (center.y - pan.y) * ratio });
+    setScale(bounded);
+  };
+  useEffect(() => { fitCanvas(); }, [activeSelection]);
+  const colors: Record<string, string> = { 目标: "#f0f2f5", 问题: "#e6f7ff", 证据: "#fffbe6", 任务: "#f6ffed", 材料: "#fffbe6", 风险: "#fff1f0", 决策: "#fff1f0", 评审: "#f9f0ff", 成果: "#f0f2f5", 行动: "#f6ffed" };
+  const borders: Record<string, string> = { 目标: "#8c8c8c", 问题: "#91d5ff", 证据: "#ffe58f", 任务: "#b7eb8f", 材料: "#ffe58f", 风险: "#ffa39e", 决策: "#ffa39e", 评审: "#d3adf7", 成果: "#8c8c8c", 行动: "#b7eb8f" };
+  return (
+    <div className="flex min-h-0 flex-1 overflow-hidden bg-white">
+      {!hideSidebar && (
+      <aside className="w-[205px] shrink-0 overflow-y-auto border-r border-[#e2e7ee] bg-[#f8f9fb]">
+        <div className="border-b border-[#e2e7ee] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="whitespace-nowrap text-[10px] font-black text-[#30415c]">知识图谱</h2>
+            <button type="button" onClick={onNewProject} className="rounded-full bg-[#f5f5f5] px-2.5 py-2 text-[9px] font-black text-[#30415c]">＋ 新建项目</button>
+          </div>
+          <input value={sidebarQuery} onChange={(event) => setSidebarQuery(event.target.value)} placeholder="⌕　搜索节点" className="mt-3 w-full rounded-md border border-[#dce3ed] bg-white px-3 py-2.5 text-[10px] font-bold text-[#526178] outline-none placeholder:text-[#8b98aa]" />
+        </div>
+        <div className="border-b border-[#e2e7ee] p-3">
+          <div className="mb-4 text-[12px] font-black text-[#30415c]">项目案例库</div>
+          <div className="mb-3 text-[10px] font-black text-[#8b98aa]">我的项目</div>
+          {sidebarProjects.filter((project) => `${project.name}${project.client}`.includes(sidebarQuery.trim())).map((project) => {
+            const meta = project.id === "audit-handoff"
+              ? "后续审计中 · 第 6 / 7 步"
+              : project.id === "huadong"
+                ? "Scope 前 · 173 条标签"
+                : "候选集 · 16 个节点 · 0 条关系";
+            const graphProject = projects.some((item) => item.id === project.id);
+            return <button type="button" key={project.id} onClick={() => graphProject && chooseProject(project.id)} className={`mb-5 block w-full px-1 text-left ${graphProject ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}><div className="text-[11px] font-black text-[#8795a9]">{project.name}</div><div className="mt-1 text-[9px] font-bold text-[#aeb9c8]">{meta}</div></button>;
+          })}
+        </div>
+        <div className="p-3">
+          {[["全部节点", "173", "#64748b"], ["风险信号", "36", "#8bd1d8"], ["内控测试", "31", "#8bd981"], ["审计程序", "84", "#ded17d"], ["合规检查", "22", "#b49be8"]].map(([label, count, color]) => <div key={label} className="mb-5 flex items-center justify-between text-[11px] font-black text-[#8795a9]"><span className="flex items-center gap-2"><i className="h-2 w-2 rounded-full" style={{ background: color }} />{label}</span><span className="text-[#b8c2d0]">{count}</span></div>)}
+        </div>
+      </aside>
+      )}
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col bg-white">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#e4e9f0] bg-[#fbfcfe] px-4 py-3">
+        <span className="mr-2 text-[12px] font-black text-[#344761]">项目案例库 · 图谱视图</span>
+        <div className="relative">
+          <button type="button" onClick={() => setProjectMenuOpen((value) => !value)} className="flex items-center gap-2 rounded-lg border border-[#dce3ed] bg-white px-3 py-2 text-[11px] font-bold text-[#526178] hover:border-[#b8c5d7]">{activeSelection === "all" ? "全部项目" : projects.find((p) => p.id === activeSelection)?.name ?? "选择项目"}<ChevronDown className={`h-4 w-4 text-[#718198] transition-transform ${projectMenuOpen ? "rotate-180" : ""}`} strokeWidth={2.5} /></button>
+          {projectMenuOpen && <div className="absolute left-0 top-11 z-20 w-[250px] rounded-xl border border-[#dce3ed] bg-white p-2 shadow-lg">
+            <input autoFocus value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="搜索项目名称" className="mb-2 w-full rounded-md border border-[#dce3ed] px-2.5 py-2 text-[10px] outline-none" />
+            <button type="button" onClick={() => { chooseProject("all"); setProjectMenuOpen(false); }} className="block w-full rounded-md px-2.5 py-2 text-left text-[10px] font-bold text-[#526178] hover:bg-[#f3f7fb]">全部项目</button>
+            {projects.filter((p) => p.name.includes(projectQuery.trim())).map((p) => <button type="button" key={p.id} onClick={() => { chooseProject(p.id); setProjectMenuOpen(false); }} className="block w-full rounded-md px-2.5 py-2 text-left text-[10px] font-bold text-[#526178] hover:bg-[#f3f7fb]">{p.name}</button>)}
+          </div>}
+        </div>
+        <div className="ml-auto flex items-center gap-1 text-[11px] font-bold text-[#6e7e95]"><button type="button" onClick={() => zoomCanvas(scale - .1)}>−</button><span className="w-10 text-center">{Math.round(scale * 100)}%</span><button type="button" onClick={() => zoomCanvas(scale + .1)}>＋</button></div>
+        <button type="button" onClick={fitCanvas} className="rounded-md px-3 py-2 text-[11px] font-bold text-[#718198] hover:bg-[#f4f6f9]">适配画布</button>
+        <button type="button" onClick={() => { setNodeOffsets({}); setScale(1); setPan({ x: 0, y: 0 }); }} className="rounded-md px-3 py-2 text-[11px] font-bold text-[#718198] hover:bg-[#f4f6f9]">自动排布</button>
+      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fcfdff]">
+        <svg viewBox="0 0 1500 1100" className="min-h-0 min-w-0 flex-1 cursor-grab touch-none active:cursor-grabbing" onWheel={(e) => { e.preventDefault(); zoomCanvas(scale * (e.deltaY < 0 ? 1.1 : 0.9)); }} onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); dragging.current = { x: e.clientX, y: e.clientY, pan }; }} onPointerMove={(e) => { if (nodeDragging.current) { const d = nodeDragging.current; setNodeOffsets((current) => ({ ...current, [d.key]: { x: (e.clientX - d.x) / scale, y: (e.clientY - d.y) / scale } })); return; } if (!dragging.current) return; setPan({ x: dragging.current.pan.x + e.clientX - dragging.current.x, y: dragging.current.pan.y + e.clientY - dragging.current.y }); }} onPointerUp={(e) => { nodeDragging.current = null; dragging.current = null; e.currentTarget.releasePointerCapture(e.pointerId); }}>
+          <defs><marker id="case-flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L7,4 z" fill="#8798ae" /></marker><marker id="case-task-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L0,8 L7,4 z" fill="#687b92" /></marker></defs>
+          <g transform={`translate(${pan.x} ${pan.y}) scale(${scale})`}>
+            {selectedProjects.map((project, projectIndex) => {
+              const nodes = flows[project.id] ?? flows["audit-handoff"];
+              const cx = activeSelection === "all" ? 750 : 750;
+              const cy = isAllView ? 360 + projectIndex * 800 : 500;
+              const referencePositions = nodes.length === 6 && isAllView ? [
+                [-300, -250], [-300, 0], [-300, 250], [0, -250], [0, 0], [0, 250],
+              ] : nodes.length === 6 ? [
+                [-600, -400], [-600, 0], [-600, 400], [0, -400], [0, 0], [0, 400],
+              ] : nodes.length === 6 ? [
+                [-360, 235], [-140, -5], [-140, 125], [-140, 355], [-90, 535], [80, 25],
+              ] : [
+                [-360, 235], [-140, -5], [-140, 125], [-140, 355], [-90, 535],
+                [80, 25], [80, 235], [80, 465], [300, 0], [300, 235], [300, 535],
+              ];
+              const layoutScale = isAllView ? 1 : 1;
+              const pos = nodes.map((node, i) => { const offset = nodeOffsets[`${project.id}:${node.id}`] ?? { x: 0, y: 0 }; return { x: cx + referencePositions[i][0] * layoutScale + offset.x, y: cy + referencePositions[i][1] * layoutScale + offset.y }; });
+              const edges = (nodes.length === 6 ? [[0, 1], [0, 2], [1, 3], [2, 3], [3, 4], [4, 5]] : [[0, 1], [0, 2], [0, 4], [1, 6], [2, 6], [2, 5], [5, 7], [5, 8], [6, 8], [6, 9], [3, 6], [3, 7], [4, 9], [7, 9], [8, 9], [9, 10]]).filter(([a, b]) => a < nodes.length && b < nodes.length);
+              return <g key={project.id}>
+                <text x={cx} y={isAllView ? cy - 315 : cy - 475} textAnchor="middle" fill="#435574" fontSize="16" fontWeight="800">{project.name}</text>
+                {edges.map(([a, b], edgeIndex) => { const dx = pos[b].x - pos[a].x; const dy = pos[b].y - pos[a].y; const distance = Math.max(Math.hypot(dx, dy), 1); const sx = pos[a].x + (dx / distance) * 45; const sy = pos[a].y + (dy / distance) * 20; const ex = pos[b].x - (dx / distance) * 45; const ey = pos[b].y - (dy / distance) * 20; return <g key={`${a}-${b}`}><line x1={sx} y1={sy} x2={ex} y2={ey} stroke={edgeIndex % 3 === 1 ? "#d94d5b" : edgeIndex % 3 === 2 ? "#4b90d9" : "#9ba8b8"} strokeWidth={edgeIndex % 3 === 1 ? 2 : 1.25} strokeDasharray={edgeIndex % 3 === 2 ? "6 5" : undefined} markerEnd="url(#case-flow-arrow)" /><text x={(sx + ex) / 2} y={(sy + ey) / 2 - 7} textAnchor="middle" fill="#738198" fontSize="8">{edgeIndex % 3 === 1 ? "触发验证" : edgeIndex % 3 === 2 ? "补充证据" : "目标关联"}</text></g>; })}
+                {nodes.map((node, i) => { const nodeKey = `${project.id}:${node.id}`; const [title, description] = node.label.split("\n"); const detailCards = flowSteps[project.id]?.[node.id] ?? []; const mainWidth = Math.min(280, Math.max(150, Math.max(title.length * 9, description.length * 7) + 28)); const detailWidth = Math.min(260, Math.max(150, ...detailCards.map((item) => item.length * 7 + 28))); return <g key={node.id} role="button" tabIndex={0} className="cursor-move" onPointerDown={(e) => { e.stopPropagation(); nodeDragging.current = { key: nodeKey, x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); }}><rect x={pos[i].x - mainWidth / 2} y={pos[i].y - 23} width={mainWidth} height="46" rx="6" fill={colors[node.kind]} stroke="#4b535f" strokeWidth="1.4" /><text x={pos[i].x} y={pos[i].y - 4} textAnchor="middle" fill="#182536" fontSize="9" fontWeight="800">{title}</text><text x={pos[i].x} y={pos[i].y + 12} textAnchor="middle" fill="#52647b" fontSize="7.5" fontWeight="700">{description}</text>{detailCards.length > 0 && <g>{detailCards.map((detail, detailIndex) => { const detailKey = `${nodeKey}:detail:${detailIndex}`; const detailOffset = nodeOffsets[detailKey] ?? { x: 0, y: 0 }; const detailX = pos[i].x + mainWidth / 2 + 100 + detailOffset.x; const detailY = pos[i].y - 20 + detailIndex * 70 + detailOffset.y; return <g key={detail} className="cursor-move" onPointerDown={(e) => { e.stopPropagation(); nodeDragging.current = { key: detailKey, x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); }}>{detailIndex > 0 && <line x1={detailX} y1={detailY - 53} x2={detailX} y2={detailY - 17} stroke={borders[node.kind]} strokeWidth="1.2" markerEnd="url(#case-flow-arrow)" />}<line x1={pos[i].x + mainWidth / 2} y1={pos[i].y} x2={detailX - detailWidth / 2} y2={detailY} stroke={borders[node.kind]} strokeWidth="1.2" markerEnd="url(#case-flow-arrow)" /><rect x={detailX - detailWidth / 2} y={detailY - 17} width={detailWidth} height="34" rx="6" fill={colors[node.kind]} stroke="#4b535f" strokeWidth="1.4" /><text x={detailX} y={detailY + 4} textAnchor="middle" fill="#52647b" fontSize="7" fontWeight="700">{detail}</text></g>; })}</g>}</g>; })}
+              </g>;
+            })}
+          </g>
+        </svg>
+        <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#e3e8ef] bg-white px-5 py-3 text-[11px] font-bold text-[#718198]">
+          <span className="font-black text-[#526178]">节点</span>
+          {(selectedProjects[0] ? (flows[selectedProjects[0].id] ?? flows["audit-handoff"]) : []).map((node) => <span key={node.id} className="flex items-center gap-2"><i className="h-3 w-3 rounded-sm border border-white shadow-sm" style={{ background: colors[node.kind] }} />{node.label.split("\n")[0]}</span>)}
+          <span className="ml-2 font-black text-[#526178]">关系</span>
+          <span className="flex items-center gap-2"><i className="h-0.5 w-8 bg-[#9ba8b8]" />目标关联</span>
+          <span className="flex items-center gap-2"><i className="h-0.5 w-8 bg-[#d94d5b]" />触发验证</span>
+          <span className="flex items-center gap-2"><i className="w-8 border-t-2 border-dashed border-[#4b90d9]" />补充证据</span>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
 function AuditGraphWorkspace({
   onNewProject,
   preparationRequest,
@@ -4438,6 +4897,8 @@ function AuditGraphWorkspace({
   nodeAssignments,
   setNodeAssignments,
   initialSource = "library",
+  initialWorkspaceTab = "graph",
+  caseLibraryMode = false,
 }: {
   onNewProject: () => void;
   preparationRequest: number;
@@ -4464,44 +4925,84 @@ function AuditGraphWorkspace({
   nodeAssignments: Record<string, string>;
   setNodeAssignments: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   initialSource?: "library" | "project";
+  initialWorkspaceTab?: GraphWorkspaceTab;
+  caseLibraryMode?: boolean;
 }) {
   const [graphSource, setGraphSource] = useState<"library" | "project">(
-    "project",
+    initialSource,
   );
-  const [selectedProjectId, setSelectedProjectId] = useState("audit-handoff");
+  const [selectedProjectId, setSelectedProjectId] = useState(() => {
+    try {
+      const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+      if (current?.projectName) return "current-project";
+    } catch { /* use the case-library fallback */ }
+    return initialWorkspaceTab === "graph" ? "huadong" : "all";
+  });
   const [projectStageOverrides, setProjectStageOverrides] = useState<
     Record<string, "pre_scope" | "candidate" | "dag">
   >({});
-  const auditProjects = [
+  const [caseProjectIds, setCaseProjectIds] = useState<string[]>(() => {
+    try {
+      const ids = JSON.parse(localStorage.getItem("roadwise.case-project-ids.v1") || "[]");
+      const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+      return Array.isArray(ids)
+        ? ids.filter((id) => id !== current?.projectId && id !== "current-project")
+        : [];
+    } catch { return []; }
+  });
+  const [openOngoingMenu, setOpenOngoingMenu] = useState<string | null>(null);
+  const storedAgentProject = (() => {
+    try {
+      const state = JSON.parse(
+        localStorage.getItem("roadwise.project-state.current-project.v1") || "null",
+      );
+      return typeof state?.projectName === "string"
+        ? state.projectName
+        : Array.isArray(state?.graph) && state.graph.length
+          ? "我的新建项目"
+          : null;
+    } catch {
+      return null;
+    }
+  })();
+  const auditProjectSeeds = [
     {
       id: "audit-handoff",
-      name: "远川制造 · 已移交",
-      client: "远川智能制造有限公司",
+      name: "社区共享自习室验证",
+      client: "创业项目",
       stage: "dag" as const,
     },
     {
       id: "huadong",
-      name: "华东智造 · 2026 年审",
-      client: "华东智造有限公司",
+      name: "Roadwise 用户需求验证",
+      client: "个人项目",
       stage: "pre_scope" as const,
     },
     {
-      id: "jinli",
-      name: "金利集团 · 专项审计",
-      client: "金利集团有限公司",
-      stage: "dag" as const,
-    },
-    {
       id: "xincheng",
-      name: "新城建设 · 2026 年审",
-      client: "新城建设集团",
+      name: "团队研究流程 SOP",
+      client: "企业项目",
       stage: "candidate" as const,
     },
+    ...(storedAgentProject ? [{ id: "current-project", name: storedAgentProject, client: (() => { try { return resolveStoredProjectClient(JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null")); } catch { return "个人项目"; } })(), stage: "pre_scope" as const }] : []),
     ...createdProjects.map((project) => ({
       ...project,
       stage: "pre_scope" as const,
     })),
   ];
+  const auditProjects = Array.from(
+    new Map(auditProjectSeeds.map((project) => [project.id, project] as const)).values(),
+  );
+  const caseLibraryProjects = auditProjects.filter((project) => ["audit-handoff", "huadong", "xincheng", ...caseProjectIds].includes(project.id));
+  const libraryDisplayProjects = caseLibraryProjects;
+  const ongoingProjects = Array.from(
+    new Map(
+      auditProjects
+        .filter((project) => !caseProjectIds.includes(project.id) && (project.id === "current-project" || createdProjects.some((created) => created.id === project.id || created.name === project.name)))
+        .map((project) => [project.name, project] as const),
+    ).values(),
+  );
+  const visibleProjects = caseLibraryMode ? libraryDisplayProjects : auditProjects;
   const selectedProject =
     auditProjects.find((project) => project.id === selectedProjectId) ??
     auditProjects[0];
@@ -4526,7 +5027,15 @@ function AuditGraphWorkspace({
       const next = typeof update === "function" ? update(current) : update;
       return { ...currentByProject, [selectedProject.id]: next };
     });
-  const [workspaceTab, setWorkspaceTab] = useState<GraphWorkspaceTab>("graph");
+  const [workspaceTab, setWorkspaceTab] = useState<GraphWorkspaceTab>(initialWorkspaceTab);
+  useEffect(() => {
+    setWorkspaceTab(initialWorkspaceTab);
+  }, [initialWorkspaceTab]);
+  useEffect(() => setWorkspaceTab(initialWorkspaceTab), [initialWorkspaceTab]);
+  useEffect(() => setGraphSource(initialSource), [initialSource]);
+  useEffect(() => {
+    if (workspaceTab === "graph") setGraphSource("project");
+  }, [workspaceTab]);
   const [manualTagsByProject, setManualTagsByProject] = useState<ManualCandidateTagsByProject>(() =>
     readStoredRecord("huaan-manual-candidate-tags-v1", {}),
   );
@@ -4556,7 +5065,6 @@ function AuditGraphWorkspace({
   const projectProfiles: Record<string, { candidateNodes: number; dagNodes: number; dagEdges: number }> = {
     "audit-handoff": { candidateNodes: 16, dagNodes: 16, dagEdges: 22 },
     huadong: { candidateNodes: 13, dagNodes: 13, dagEdges: 15 },
-    jinli: { candidateNodes: 14, dagNodes: 14, dagEdges: 18 },
     xincheng: { candidateNodes: 16, dagNodes: 16, dagEdges: 22 },
   };
   const selectedProjectProfile = projectProfiles[selectedProject.id] ?? {
@@ -4663,12 +5171,12 @@ function AuditGraphWorkspace({
   );
   const projectKinds = [
     ["全部节点", projectGraphNodes.length, "#64748b"],
-    ["项目配置", projectGraphNodes.filter((node) => node.kind === "项目配置").length, "#253b66"],
-    ["风险信号", projectGraphNodes.filter((node) => node.kind === "风险信号" || node.kind === "复合风险").length, "#36b9c3"],
-    ["内控测试", projectGraphNodes.filter((node) => node.kind === "内控测试").length, "#55c83e"],
-    ["审计程序", projectGraphNodes.filter((node) => node.kind === "审计程序").length, "#c5b62f"],
-    ["合规检查", projectGraphNodes.filter((node) => node.kind === "合规检查").length, "#8460c7"],
-    ["执行结果", projectGraphNodes.filter((node) => node.kind === "执行结果").length, "#52637a"],
+    ["目标", projectGraphNodes.filter((node) => node.kind === "目标").length, "#253b66"],
+    ["问题与风险", projectGraphNodes.filter((node) => node.kind === "问题" || node.kind === "风险").length, "#36b9c3"],
+    ["任务", projectGraphNodes.filter((node) => node.kind === "任务").length, "#55c83e"],
+    ["材料与证据", projectGraphNodes.filter((node) => node.kind === "材料" || node.kind === "证据").length, "#c5b62f"],
+    ["评审与决策", projectGraphNodes.filter((node) => node.kind === "评审" || node.kind === "决策").length, "#8460c7"],
+    ["成果与行动", projectGraphNodes.filter((node) => node.kind === "成果" || node.kind === "行动").length, "#52637a"],
   ] as const;
   const libraryKinds = libraryTagGroups.map(
     (group) => [group.kind, group.count, group.color] as const,
@@ -4774,28 +5282,28 @@ function AuditGraphWorkspace({
         color: "#aab5c5",
         width: 1,
         dash: undefined,
-        label: "Scope 筛选",
+        label: "目标关联",
       };
     if (from.startsWith("rs") && to === "and1")
       return {
         color: "#d9901f",
         width: 1.8,
         dash: undefined,
-        label: "AND 依赖",
+        label: "问题依赖",
       };
     if (from.startsWith("rs") && to.startsWith("ct"))
       return {
         color: "#7d899a",
         width: 1.4,
         dash: undefined,
-        label: "激活 CT",
+        label: "生成任务",
       };
     if (from === "and1")
       return {
         color: "#dc4e55",
         width: 2.4,
         dash: undefined,
-        label: "AND 跨层触发",
+        label: "触发验证",
       };
     if (from.startsWith("rs") && to.startsWith("ap"))
       return {
@@ -4809,14 +5317,14 @@ function AuditGraphWorkspace({
         color: "#4b8bd8",
         width: 1.5,
         dash: "5 4",
-        label: "调整 AP 参数",
+        label: "补充证据",
       };
     if (to === "human")
       return {
         color: "#596b86",
         width: 1.4,
         dash: undefined,
-        label: "提交人工确认",
+        label: "提交负责人确认",
       };
     if (from === "human")
       return {
@@ -4829,26 +5337,26 @@ function AuditGraphWorkspace({
       color: "#66758b",
       width: 1.3,
       dash: undefined,
-      label: "汇入完成层",
+      label: "汇入成果层",
     };
   };
   const nodeCode: Record<string, string> = {
-    scope: "PROJECT-SCOPE",
-    rs1: "RS-REV-001",
-    rs2: "RS-AR-001",
-    rs3: "RS-INV-001",
-    rs4: "RS-CAS-001",
-    and1: "RS-FRAUD-001",
-    ct1: "CT-REV-001",
-    ct2: "CT-INV-001",
-    ap1: "AP-REV-001",
-    ap2: "AP-REV-002",
-    ap3: "AP-AR-002",
-    ap4: "AP-INV-001",
-    cc1: "CC-REL-001",
-    human: "HUMAN-REVIEW",
-    evidence: "AUDIT-EVIDENCE",
-    complete: "COMP-001",
+    scope: "GOAL-001",
+    rs1: "PROB-001",
+    rs2: "EVID-001",
+    rs3: "MAT-001",
+    rs4: "RISK-001",
+    and1: "DEC-001",
+    ct1: "TASK-001",
+    ct2: "TASK-002",
+    ap1: "TASK-003",
+    ap2: "OUT-001",
+    ap3: "EVID-002",
+    ap4: "OUT-002",
+    cc1: "REVIEW-001",
+    human: "REVIEW-002",
+    evidence: "RESULT-001",
+    complete: "NEXT-001",
   };
   const nodeSurface = (kind: string) =>
     ({
@@ -4861,6 +5369,16 @@ function AuditGraphWorkspace({
       人工节点: "#eef1f5",
       执行结果: "#eef1f5",
       完成阶段: "#fffde2",
+      目标: "#dff7f8",
+      问题: "#dff7f8",
+      风险: "#ffecd5",
+      任务: "#bdf7a8",
+      材料: "#fffde2",
+      证据: "#fffde2",
+      决策: "#ffb34d",
+      评审: "#f1e9ff",
+      成果: "#eef1f5",
+      行动: "#d9f3e8",
     })[kind] ?? "#f5f7fa";
   const libraryCode = (node: { id: string; kind: string }) => {
     const number = (node.id.split("-").slice(-1)[0] ?? "1").padStart(3, "0");
@@ -4918,19 +5436,16 @@ function AuditGraphWorkspace({
         <div className="border-b border-[#e2e7ee] p-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="shrink-0 whitespace-nowrap text-[10px] font-black text-[#30415c]">
-              标签图谱
+              知识图谱
             </h2>
             <button
               type="button"
               onClick={onNewProject}
-              className="h-7 shrink-0 whitespace-nowrap rounded-full bg-[#f5f5f5] px-2.5 text-[8px] font-black text-[#30415c] hover:bg-[#eeeeee]"
+              className="hidden h-7 shrink-0 whitespace-nowrap rounded-full bg-[#f5f5f5] px-2.5 text-[8px] font-black text-[#30415c] hover:bg-[#eeeeee]"
             >
-              ＋ 新建审计项目
+              ＋ 新建项目
             </button>
           </div>
-          <p className="mt-1 text-[8px] font-bold text-[#929daf]">
-            按类型查看审计节点
-          </p>
           <label className="mt-3 flex h-8 items-center gap-2 rounded-md border border-[#dce3ed] bg-white px-2">
             <Search className="h-3 w-3 text-[#8895a8]" />
             <input
@@ -4942,28 +5457,22 @@ function AuditGraphWorkspace({
           </label>
         </div>
         <div className="border-b border-[#e0e5ec] p-2 font-bold text-[#8a96a7]">
-          <p className="px-2.5 pb-1 text-[11px] font-black text-[#46566f]">
-            全所标签池
-          </p>
           <button
             type="button"
             onClick={() => {
               switchGraphSource("library");
-              setWorkspaceTab("list");
+              setWorkspaceTab(workspaceTab === "graph" ? "graph" : "list");
             }}
-            className={`mb-2 w-full px-3 py-2.5 text-left transition-opacity ${graphSource === "library" ? "opacity-100" : "opacity-55 hover:opacity-100"}`}
+            className={`mb-2 w-full px-2.5 py-2.5 text-left transition-opacity ${graphSource === "library" ? "opacity-100" : "opacity-55 hover:opacity-100"}`}
           >
-            <strong className="block text-[12px] leading-tight text-[#3f506a]">
-              公共标签资产
+            <strong className="block text-[14px] leading-normal font-black text-[#46566f]">
+              项目案例库
             </strong>
-            <span className="audit-sidebar-meta mt-1 block leading-relaxed text-[#718097]">
-              173 条标签 · 统一维护与版本管理
-            </span>
           </button>
-          <p className="px-2.5 pb-2 text-[11px] font-black text-[#46566f]">
-            审计项目
-          </p>
-          {auditProjects.map((project) => {
+          <strong className="block px-2.5 pb-2 text-[12px] leading-normal font-black text-[#8996a8]">
+            {caseLibraryMode ? "案例项目" : "我的项目"}
+          </strong>
+          {(caseLibraryMode ? caseLibraryProjects : visibleProjects).map((project) => {
             const stage = projectStageOverrides[project.id] ?? project.stage;
             const downstreamProgress =
               downstreamProgressByProject[project.id] ?? -1;
@@ -4984,10 +5493,8 @@ function AuditGraphWorkspace({
                 }}
                 className={`mb-1 w-full px-3 py-3 text-left transition-opacity ${active ? "opacity-100" : "opacity-55 hover:opacity-100"}`}
               >
-                <strong className="block text-[12px] leading-tight text-[#3f506a]">
-                  {project.name}
-                </strong>
-                <span className="audit-sidebar-meta mt-1 block leading-relaxed text-[#718097]">
+                <strong className="block text-[12px] leading-tight text-[#3f506a]">{project.name}</strong>
+                <span className="audit-sidebar-meta hidden mt-1 block leading-relaxed text-[#718097]">
                   {downstreamProgress >= 7
                     ? `已归档 · ${profile.dagNodes} 个节点 · ${profile.dagEdges} 条关系`
                     : downstreamProgress >= 0
@@ -5001,8 +5508,42 @@ function AuditGraphWorkspace({
               </button>
             );
           })}
+          {caseLibraryMode && (
+            <>
+              <strong className="mt-3 block border-t border-[#e0e5ec] px-2.5 pb-2 pt-4 text-[12px] leading-normal font-black text-[#8996a8]">
+                进行中
+              </strong>
+              {ongoingProjects.map((project) => (
+                <div key={project.id} className={`relative mb-1 w-full px-3 py-3 text-left transition-opacity ${graphSource === "project" && selectedProjectId === project.id ? "opacity-100" : "opacity-55 hover:opacity-100"}`}>
+                  <div className="flex items-start gap-2">
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedProjectId(project.id); switchGraphSource("project"); }}><strong className="text-[12px] leading-tight text-[#3f506a]">{project.name}</strong></button>
+                    <button type="button" aria-label="项目操作" className="shrink-0 rounded p-1 text-[#8996a8] hover:bg-[#eef2f7]" onClick={() => setOpenOngoingMenu(openOngoingMenu === project.id ? null : project.id)}><MoreHorizontal className="h-4 w-4" /></button>
+                    {openOngoingMenu === project.id && <div className="absolute right-2 top-10 z-30 w-28 rounded-lg border border-[#dce3ed] bg-white p-1 shadow-lg">
+                      <button type="button" className="block w-full rounded px-2 py-1.5 text-left text-[10px] font-bold text-[#315ca9] hover:bg-[#f3f6fb]" onClick={() => {
+                        const nextIds = Array.from(new Set([...caseProjectIds, project.id]));
+                        setCaseProjectIds(nextIds);
+                        localStorage.setItem("roadwise.case-project-ids.v1", JSON.stringify(nextIds));
+                        setOpenOngoingMenu(null);
+                        window.dispatchEvent(new Event("roadwise-project-state-updated"));
+                      }}>加入案例</button>
+                      <button type="button" className="block w-full rounded px-2 py-1.5 text-left text-[10px] font-bold text-[#c84b5b] hover:bg-[#fff3f3]" onClick={() => {
+                        try {
+                          const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+                          localStorage.setItem("roadwise.project-states.v1", JSON.stringify(Array.isArray(collection) ? collection.filter((item) => item?.projectId !== project.id && item?.projectName !== project.name) : []));
+                          const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+                          if (current?.projectId === project.id || current?.projectName === project.name) localStorage.removeItem("roadwise.project-state.current-project.v1");
+                        } catch { /* keep the UI usable if storage is unavailable */ }
+                        setOpenOngoingMenu(null);
+                        window.dispatchEvent(new Event("roadwise-project-state-updated"));
+                      }}>删除</button>
+                    </div>}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
-        {graphSource === "project" && projectStage !== "dag" && (
+        {!caseLibraryMode && graphSource === "project" && projectStage !== "dag" && (
           <div className="border-b border-[#e0e5ec] p-2">
             <p className="px-2.5 pb-2 text-[11px] font-black text-[#3c4d67]">
               项目准备
@@ -5035,9 +5576,6 @@ function AuditGraphWorkspace({
                 <strong className="block text-[12px] leading-tight text-[#2f405a]">
                   候选标注集审核
                 </strong>
-                <small className="mt-1 block text-[10px] font-bold leading-relaxed text-[#66768d]">
-                  默认纳入；支持调整或排除
-                </small>
               </span>
               <span
                 className={`shrink-0 rounded px-1.5 py-0.5 text-[7px] font-black ${projectStage === "dag" ? "bg-emerald-50 text-emerald-700" : projectStage === "candidate" ? "bg-amber-50 text-amber-700" : "bg-gray-100 text-gray-500"}`}
@@ -5051,7 +5589,7 @@ function AuditGraphWorkspace({
             </button>
           </div>
         )}
-        <nav className="p-2" aria-label="图谱节点类型">
+        {!caseLibraryMode && <nav className="p-2" aria-label="图谱节点类型">
           {kinds.map(([kind, count, color]) => (
             <button
               type="button"
@@ -5071,44 +5609,13 @@ function AuditGraphWorkspace({
               </span>
             </button>
           ))}
-        </nav>
+        </nav>}
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
-        <div className="flex h-11 items-center justify-between border-b border-[#e3e8ef] px-3">
-          <div className="flex h-full items-center gap-5">
-            {(
-              [
-                ["list", "列表视图"],
-                ["graph", "图谱视图"],
-                ["execution", "审核工作台"],
-              ] as const
-            ).map(([tab, label]) => (
-              <button
-                type="button"
-                key={tab}
-                onClick={() => setWorkspaceTab(tab)}
-                className={`h-full border-b-2 text-[9px] ${workspaceTab === tab ? "border-[#2e65c7] font-black text-[#2e5fb4]" : "border-transparent font-bold text-[#78869b] hover:text-[#2e5fb4]"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <span className="text-[8px] font-bold text-[#8b97a8]">
-            {graphSource === "library"
-              ? "全所标签池 · 无项目关系"
-              : selectedDownstreamProgress >= 7
-                ? `${selectedProject.name} · 项目已归档`
-                : selectedDownstreamProgress >= 0
-                  ? `${selectedProject.name} · 后续审计第 ${selectedDownstreamProgress + 1} / 7 步`
-              : projectStage === "pre_scope"
-                ? `${selectedProject.name} · Scope 筛选前`
-                : projectStage === "candidate"
-                  ? `${selectedProject.name} · 候选标注集 · 尚未建立关系`
-                  : `${selectedProject.name} · 项目 DAG 运行中`}
-          </span>
-        </div>
-        {workspaceTab === "graph" ? (
+      {caseLibraryMode && initialWorkspaceTab === "graph" && workspaceTab === "graph" ? (
+        <ReactFlowCaseLibraryGraphView projects={graphSource === "project" ? auditProjects : libraryDisplayProjects} selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} />
+      ) : <div className="flex min-w-0 flex-1 flex-col bg-white">
+        {initialWorkspaceTab === "graph" ? (
           <>
             {graphSource === "project" && projectStage !== "pre_scope" && (
               <div className="flex h-9 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[#e7ebf0] bg-[#f8fafc] px-3 custom-scrollbar">
@@ -5118,10 +5625,10 @@ function AuditGraphWorkspace({
                 {(
                   [
                     ["all", "全部"],
-                    ["1", "第一层 RS"],
-                    ["2", "第二层 CT"],
-                    ["3", "第三层 AP/CC"],
-                    ["4", "第四层 完成"],
+                    ["1", "第一层 目标/问题"],
+                    ["2", "第二层 任务"],
+                    ["3", "第三层 材料/证据"],
+                    ["4", "第四层 评审/行动"],
                   ] as const
                 ).map(([layer, label]) => (
                   <button
@@ -5191,13 +5698,15 @@ function AuditGraphWorkspace({
               </button>
               <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap text-[8px] font-bold text-[#76859a]">
                 <CircleDot className="h-3 w-3 text-[#2f9c78]" />
-                {graphSource === "library"
-                  ? "公共标签资产，未进入具体项目"
+                {caseLibraryMode
+                  ? `项目案例图谱 · ${selectedProject.name}`
+                  : graphSource === "library"
+                    ? "公共标签资产，未进入具体项目"
                   : projectStage === "pre_scope"
                     ? "待确认重要性参数并执行 Scope 筛选"
                     : projectStage === "candidate"
                       ? "候选标签已选出，冻结后建立关系"
-                      : "DAG 已启动，标签关系已建立"}
+                      : "项目阶段关系已建立"}
               </div>
             </div>
             <div className="relative min-h-0 flex-1 overflow-hidden bg-[#fcfdfe]">
@@ -5205,7 +5714,7 @@ function AuditGraphWorkspace({
                 viewBox="0 0 780 570"
                 className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
                 role="img"
-                aria-label="审计标签关系图谱"
+                aria-label={caseLibraryMode ? "项目案例流程图谱" : "审计标签关系图谱"}
                 onWheel={(event) => {
                   event.preventDefault();
                   const anchor = pointInCanvas(
@@ -6002,7 +6511,7 @@ function AuditGraphWorkspace({
                 ["#d95b63", "AND 复合"],
                 ["#55c83e", "CT 控制测试"],
                 ["#c5b62f", "AP 程序"],
-                ["#8b7f1f", "AP 强制"],
+                ["#8b7f1f", "阶段约束"],
                 ["#8a63d2", "CC 合规"],
                 ["#33445f", "完成阶段"],
               ].map(([color, label]) => (
@@ -6018,8 +6527,8 @@ function AuditGraphWorkspace({
               <span className="font-black text-[#43536c]">关系</span>
               {[
                 ["#d9901f", "RS / AND"],
-                ["#7d899a", "激活 CT"],
-                ["#dc4e55", "跨层触发"],
+                ["#7d899a", "生成任务"],
+                ["#dc4e55", "触发验证"],
                 ["#4b8bd8", "参数调整"],
                 ["#66758b", "汇入完成"],
               ].map(([color, label], index) => (
@@ -6037,14 +6546,15 @@ function AuditGraphWorkspace({
               ))}
             </div>
           </>
-        ) : workspaceTab === "list" && graphSource === "library" ? (
+        ) : workspaceTab === "list" ? (
           <LibraryTagListPanel
-            nodes={libraryTagNodes}
+            nodes={graphSource === "project" ? projectGraphNodes : libraryTagNodes}
+            projectFlow={graphSource === "project" ? projectGraphNodes.map((node) => node.label) : undefined}
             onReference={onReference}
           />
         ) : (
           <GraphWorkspacePanel
-            tab={workspaceTab}
+            tab={initialWorkspaceTab}
             candidateNodes={projectGraphNodes}
             onAddManualTags={(ids) =>
               setManualTagsByProject((current) => ({
@@ -6098,12 +6608,14 @@ function AuditGraphWorkspace({
             materialRequests={selectedMaterialRequests}
             setMaterialRequests={setSelectedMaterialRequests}
             projectId={selectedProject.id}
+            projectName={selectedProject.name}
+            libraryMode={graphSource === "library"}
             onOpenDownstream={onOpenDownstream}
             onHandoffDownstream={onHandoffDownstream}
             downstreamProgressByProject={downstreamProgressByProject}
           />
         )}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -6133,14 +6645,23 @@ function AgentDock({
 }) {
   const [historyCollapsed, setHistoryCollapsed] = useState(true);
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([
+  const [showAgentConfig, setShowAgentConfig] = useState(false);
+  const [agentApiKey, setAgentApiKey] = useState("");
+  const [agentModel, setAgentModel] = useState("deepseek-chat");
+  const [agentConfigStatus, setAgentConfigStatus] = useState("");
+  const [messages, setMessages] = useState(() => readSharedAgentMessages().length ? readSharedAgentMessages() : [
     { role: "user", text: "解释当前选中的“虚增收入”节点为什么被推荐。" },
     {
       role: "agent",
       text: "该节点由“收入异常”与“账龄恶化”共同命中形成。两条信号同时出现时，虚增收入风险显著上升。建议保留，并由 CPA 确认是否启动收入专项程序。",
     },
   ]);
-  const sendMessage = () => {
+  useEffect(() => {
+    const unsubscribe = subscribeSharedAgentMessages(() => setMessages(readSharedAgentMessages()));
+    return unsubscribe;
+  }, []);
+  useEffect(() => { writeSharedAgentMessages(messages); }, [messages]);
+  const sendMessage = async () => {
     const value = message.trim();
     if (!value) return;
     setMessages((current) => [
@@ -6151,11 +6672,19 @@ function AgentDock({
       },
       {
         role: "agent",
-        text: "已结合当前页面与引用内容进行分析。该请求将作为建议保留，涉及方案冻结的操作仍需 CPA 确认。",
+        text: "正在调用项目 Agent…",
       },
     ]);
     setMessage("");
     onClearReference();
+    try {
+      const response = await fetch("http://127.0.0.1:4000/api/project-agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", projectId: "current-project", message: value, context: reference }) });
+      const result = await response.json();
+      const text = response.ok ? `${result.message} ${result.findings?.join(" ") ?? ""}` : (result.error ?? result.detail ?? "项目 Agent 调用失败，请检查后端服务。");
+      setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, text } : item));
+    } catch {
+      setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, text: "项目 Agent 暂不可用，请先启动 backend 服务。" } : item));
+    }
   };
   if (!open) return null;
   const toggleHistory = () => {
@@ -6306,7 +6835,7 @@ function AgentDock({
             onChange={(event) => onAgentChange(event.target.value)}
             className="mt-2 h-8 w-full rounded-md border border-[#dce3ed] bg-white px-2 text-[9px] font-black text-[#40516b] outline-none"
           >
-            <option>图谱检索 Agent</option>
+            <option>RoadwiseLab推出的Agent</option>
             <option>Scope 匹配 Agent</option>
             <option>审计方案 Agent</option>
             <option>执行协调 Agent</option>
@@ -6353,9 +6882,12 @@ function AgentDock({
               onClick={onNewProject}
               className="flex h-8 items-center gap-1 rounded-full bg-[#f5f7fa] px-3 text-[9px] font-bold text-[#526078] hover:bg-[#edf1f6] focus:outline-none focus:ring-2 focus:ring-[#d7e1f2]"
             >
-              新建审计项目
+              新建个人项目
               <ChevronRight className="h-3 w-3 text-[#9aa5b5]" />
             </button>
+            <button type="button" onClick={() => setMessages((current) => [...current, { role: "user", text: "请根据当前项目生成项目环节和知识图谱。" }, { role: "agent", text: "已根据当前项目目标生成节点环节、具体任务和图谱关系，结果已同步到进行中项目。" }])} className="flex h-8 items-center gap-1 rounded-full bg-[#edf3ff] px-3 text-[9px] font-bold text-[#315ca9]">生成项目图谱 <ChevronRight className="h-3 w-3" /></button>
+            <button type="button" onClick={() => setMessages((current) => [...current, { role: "user", text: "请框定当前图谱中的具体内容并修改。" }, { role: "agent", text: "已进入图谱编辑模式，可修改节点、任务并新增或删除分点，变更会同步到知识图谱。" }])} className="flex h-8 items-center gap-1 rounded-full bg-[#edf3ff] px-3 text-[9px] font-bold text-[#315ca9]">编辑图谱 <ChevronRight className="h-3 w-3" /></button>
+            <button type="button" onClick={() => setMessages((current) => [...current, { role: "user", text: "上传已完成成果并进行评审。" }, { role: "agent", text: "请在下方输入框添加成果说明或上传材料，Agent 将结合当前图谱、节点任务和外部检索结果生成评审意见。" }])} className="flex h-8 items-center gap-1 rounded-full bg-[#edf3ff] px-3 text-[9px] font-bold text-[#315ca9]">成果评审 <ChevronRight className="h-3 w-3" /></button>
           </div>
           <div className="space-y-4">
             {messages.map((item, index) => (
@@ -6434,6 +6966,11 @@ function AgentDock({
                 <Plus className="h-3.5 w-3.5" />
                 <span className="text-[7px] font-bold">当前页面</span>
                 <span className="text-[7px] font-bold">项目数据</span>
+                <button type="button" onClick={() => setShowAgentConfig(true)} className="text-[7px] font-black text-[#315ca9]">Agent 配置</button>
+                <label className="cursor-pointer text-[7px] font-bold text-[#315ca9]">
+                  上传成果
+                  <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; setMessages((current) => [...current, { role: "user", text: `已上传成果：${file.name}` }, { role: "agent", text: "已接收成果材料，将结合当前项目图谱和任务链进行评审。" }]); event.currentTarget.value = ""; }} />
+                </label>
               </div>
               <button
                 type="button"
@@ -6450,6 +6987,29 @@ function AgentDock({
             <span>CPA supervised</span>
           </div>
         </div>
+        {showAgentConfig && (
+          <div className="absolute inset-0 z-30 grid place-items-center bg-black/20 p-4">
+            <form autoComplete="off" onSubmit={(event) => event.preventDefault()} className="w-full max-w-[320px] rounded-xl border border-[#dce3ed] bg-white p-4 shadow-xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[11px] font-black text-[#33445f]">Agent 配置</h3>
+                <button type="button" onClick={() => setShowAgentConfig(false)} className="text-[16px] text-[#8b97a8]">×</button>
+              </div>
+              <p className="mt-2 text-[8px] leading-relaxed text-[#7d899b]">密钥只提交给本地后端，不写入前端代码，也不会返回给浏览器。</p>
+              <input name="deepseek-api-key" autoComplete="new-password" type="password" value={agentApiKey} onChange={(event) => setAgentApiKey(event.target.value)} placeholder="DeepSeek API Key" className="mt-3 h-9 w-full rounded-md border border-[#dce3ed] px-2 text-[9px] outline-none" />
+              <input name="agent-model" autoComplete="off" value={agentModel} onChange={(event) => setAgentModel(event.target.value)} placeholder="模型，例如 deepseek-chat" className="mt-2 h-9 w-full rounded-md border border-[#dce3ed] px-2 text-[9px] outline-none" />
+              {agentConfigStatus && <p className="mt-2 text-[8px] text-[#315ca9]">{agentConfigStatus}</p>}
+              <button type="button" onClick={async () => {
+                setAgentConfigStatus("正在保存…");
+                try {
+                  const response = await fetch("http://127.0.0.1:4000/api/project-agent/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: agentApiKey, model: agentModel }) });
+                  const result = await response.json();
+                  setAgentConfigStatus(response.ok ? `已连接 ${result.model}` : (result.error ?? result.detail ?? "配置失败"));
+                  if (response.ok) setAgentApiKey("");
+                } catch { setAgentConfigStatus("后端服务不可用，请先启动 backend。"); }
+              }} className="mt-3 h-9 w-full rounded-md bg-[#315ca9] text-[9px] font-black text-white">保存并连接</button>
+            </form>
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -6879,8 +7439,9 @@ export default function AuditTagSystemView({
   const [view, setView] = useState<
     "overview" | "agents" | "library" | "graph" | "review" | "execution" | "downstream"
   >("graph");
+  const [workspaceTab, setWorkspaceTab] = useState<GraphWorkspaceTab>("list");
   const [reference, setReference] = useState("");
-  const [agent, setAgent] = useState("图谱检索 Agent");
+  const [agent, setAgent] = useState("RoadwiseLab推出的Agent");
   const [agentPanelWidth, setAgentPanelWidth] = useState(340);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<"全部" | RuleType>("全部");
@@ -6895,8 +7456,28 @@ export default function AuditTagSystemView({
     string | null
   >(null);
   const [createdProjects, setCreatedProjects] = useState<CreatedAuditProject[]>(
-    [],
+    () => {
+      try {
+        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+        const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+        const states = [...(Array.isArray(collection) ? collection : []), ...(current?.projectName ? [current] : [])];
+        return Array.from(new Map(states.filter((state) => state?.projectName).map((state) => [state.projectId || state.projectName, { id: state.projectId || state.projectName, name: state.projectName, client: resolveStoredProjectClient(state), period: "当前项目" }])).values());
+      } catch { return []; }
+    },
   );
+  useEffect(() => {
+    const syncAgentProject = () => {
+      try {
+        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+        const current = JSON.parse(localStorage.getItem("roadwise.project-state.current-project.v1") || "null");
+        const states = [...(Array.isArray(collection) ? collection : []), ...(current?.projectName ? [current] : [])];
+        setCreatedProjects(Array.from(new Map(states.filter((state) => state?.projectName).map((state) => [state.projectId || state.projectName, { id: state.projectId || state.projectName, name: state.projectName, client: resolveStoredProjectClient(state), period: "当前项目" }])).values()));
+      } catch { /* keep current workbench state */ }
+    };
+    window.addEventListener("roadwise-project-state-updated", syncAgentProject);
+    syncAgentProject();
+    return () => window.removeEventListener("roadwise-project-state-updated", syncAgentProject);
+  }, []);
   const [projectForm, setProjectForm] = useState({
     name: "华东智造有限公司2026年度审计",
     client: "华东智造有限公司",
@@ -6915,7 +7496,7 @@ export default function AuditTagSystemView({
   const [downstreamProjectId, setDownstreamProjectId] = useState("audit-handoff");
   const [downstreamProgressByProject, setDownstreamProgressByProject] = useState<
     Record<string, number>
-  >({ "audit-handoff": 5, huadong: -1, jinli: -1, xincheng: -1 });
+  >({ "audit-handoff": 5, huadong: -1, xincheng: -1 });
   const [taskDecisionsByProject, setTaskDecisionsByProject] = useState<
     Record<string, AuditTaskDecisionMap>
   >({
@@ -6927,7 +7508,6 @@ export default function AuditTagSystemView({
     Record<string, AuditMaterialRequestMap>
   >({
     "audit-handoff": {},
-    jinli: initialAuditMaterialRequests,
   });
   const [nodeAssignments, setNodeAssignments] = useState<Record<string, string>>(
     () =>
@@ -6960,10 +7540,7 @@ export default function AuditTagSystemView({
   return (
     <div
       id="workbench-view-root"
-      style={{
-        paddingRight: agentPanelOpen ? agentPanelWidth + 16 : undefined,
-      }}
-      className={`min-w-0 flex-1 bg-[#f7f8fc] p-4 select-none custom-scrollbar transition-[padding-right] duration-200 md:p-5 2xl:p-6 ${view === "graph" || view === "downstream" ? "flex flex-col overflow-hidden" : "overflow-y-auto"}`}
+      className={`min-w-0 flex-1 bg-[#f7f8fc] p-4 select-none custom-scrollbar md:p-5 2xl:p-6 ${view === "graph" || view === "downstream" ? "flex flex-col overflow-hidden" : "overflow-y-auto"}`}
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e5e9f1] pb-3">
         <div className="mr-auto flex min-w-0 items-center gap-3">
@@ -6978,28 +7555,22 @@ export default function AuditTagSystemView({
             </button>
           )}
           <h1 className="truncate text-[22px] font-black text-[#202d55]">
-            审计标注系统
+            研创工作台
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setView("graph")}
-            aria-current={view === "graph" ? "page" : undefined}
-            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-[#d7e1f2] ${view === "graph" ? "bg-[#edf2ff] text-[#2859c4]" : "bg-white text-[#64748a]"}`}
-          >
-            知识图谱
-            <ChevronRight className="h-3.5 w-3.5 text-[#7895d0]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("downstream")}
-            aria-current={view === "downstream" ? "page" : undefined}
-            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-[#d7e1f2] ${view === "downstream" ? "bg-[#edf2ff] text-[#2859c4]" : "bg-white text-[#64748a]"}`}
-          >
-            后续审计流程
-            <ChevronRight className="h-3.5 w-3.5 text-[#7895d0]" />
-          </button>
+          {([['list', '列表视图'], ['graph', '图谱视图'], ['execution', '阶段评审']] as const).map(([tab, label]) => (
+            <button
+              type="button"
+              key={tab}
+              onClick={() => { setWorkspaceTab(tab); setView('graph'); }}
+              aria-current={view === 'graph' && workspaceTab === tab ? 'page' : undefined}
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-[#d7e1f2] ${view === 'graph' && workspaceTab === tab ? 'bg-[#edf2ff] text-[#2859c4]' : 'bg-white text-[#64748a]'}`}
+            >
+              {label}
+              <ChevronRight className="h-3.5 w-3.5 text-[#7895d0]" />
+            </button>
+          ))}
         </div>
       </header>
 
@@ -7031,6 +7602,8 @@ export default function AuditTagSystemView({
         <AgentOrchestration onNavigate={setView} />
       ) : view === "graph" ? (
         <AuditGraphWorkspace
+          initialWorkspaceTab={workspaceTab}
+          caseLibraryMode={(workspaceTab === "graph" || workspaceTab === "list" || workspaceTab === "execution") && !preparationProjectId}
           onNewProject={() => {
             setProjectStep(1);
             setShowProject(true);
@@ -7038,7 +7611,7 @@ export default function AuditTagSystemView({
           preparationRequest={preparationRequest}
           preparationProjectId={preparationProjectId}
           createdProjects={createdProjects}
-          initialSource={projectGraphReady ? "project" : "library"}
+          initialSource={workspaceTab === "list" ? "library" : "project"}
           materialityConfirmed={materialityConfirmed}
           projectGraphReady={projectGraphReady}
           nodeAssignments={nodeAssignments}
@@ -7264,7 +7837,7 @@ export default function AuditTagSystemView({
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-[9px] font-black text-[#3f5d99]">
                     <Bot className="h-3.5 w-3.5" />
-                    图谱检索 Agent
+                    RoadwiseLab推出的Agent
                   </span>
                   <button
                     type="button"
@@ -7507,7 +8080,7 @@ export default function AuditTagSystemView({
               <div className="rounded-lg bg-[#f1f5ff] p-3">
                 <div className="flex items-center gap-2 text-[9px] font-black text-[#405f9f]">
                   <Sparkles className="h-3.5 w-3.5" />
-                  华小安可根据描述生成条件表达式和字段草稿
+                  RoadwiseLab 可根据描述生成条件表达式和字段草稿
                 </div>
               </div>
             </div>
@@ -8114,10 +8687,15 @@ export default function AuditTagSystemView({
                         return;
                       }
                       const id = `project-${Date.now()}`;
-                      setCreatedProjects((current) => [
-                        ...current,
-                        { id, ...projectForm },
-                      ]);
+                      const created = { id, ...projectForm };
+                      setCreatedProjects((current) => [...current.filter((item) => item.id !== id), created]);
+                      try {
+                        const collection = JSON.parse(localStorage.getItem("roadwise.project-states.v1") || "[]");
+                        const state = { projectId: id, projectName: projectForm.name, client: projectForm.client, period: projectForm.period, graph: [] };
+                        localStorage.setItem("roadwise.project-states.v1", JSON.stringify([...(Array.isArray(collection) ? collection : []), state]));
+                        localStorage.setItem("roadwise.project-state.current-project.v1", JSON.stringify(state));
+                      } catch { /* keep project creation usable if storage is unavailable */ }
+                      window.dispatchEvent(new Event("roadwise-project-state-updated"));
                       setLatestCreatedProjectId(id);
                       setProjectStep(5);
                     }}
@@ -8165,21 +8743,11 @@ export default function AuditTagSystemView({
           </section>
         </div>
       )}
-      <AgentDock
-        open={agentPanelOpen}
-        onToggle={() => onToggleAgentPanel?.()}
-        panelWidth={agentPanelWidth}
-        onWidthChange={setAgentPanelWidth}
-        reference={reference}
-        onClearReference={() => setReference("")}
-        agent={agent}
-        onAgentChange={setAgent}
-        onNewRule={() => setShowCreate(true)}
-        onNewProject={() => {
-          setProjectStep(1);
-          setShowProject(true);
-        }}
-      />
+      {agentPanelOpen && (
+        <aside className="fixed bottom-0 right-0 top-[54px] z-[70] w-[430px] overflow-hidden border-l border-[#e4e8f0] bg-white shadow-[-8px_0_20px_rgba(38,58,92,.12)]">
+          <ChatHomeView agents={[]} onSelectAgent={() => undefined} />
+        </aside>
+      )}
     </div>
   );
 }

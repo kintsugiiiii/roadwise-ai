@@ -19,7 +19,8 @@ import AgentGenericView from './components/AgentGenericView';
 import ChatHomeView from './components/ChatHomeView';
 import HRManagementAgentView from './components/HRManagementAgentView';
 import { PlusCircle, X, Check, Calendar, ChevronDown, Search, ChevronLeft, ChevronRight, PanelTop, RefreshCw, Wifi, Plus, Maximize2, Minimize2, PanelLeft, PanelRight, Terminal, Globe2, Folder, MessageCircle } from 'lucide-react';
-import huaxiaoanLogo from './assets/huaxiaoan-logo.png?inline';
+import roadwiseLogo from './assets/roadwise-logo.png?inline';
+import { readSharedAgentMessages, readSharedAgentSessions, subscribeSharedAgentMessages, writeSharedAgentSessions } from './lib/agentSession';
 
 type ActiveView = 'workbench' | 'collaboration' | 'assistant' | 'direct-chat' | 'annual-report-audit' | 'hr-management' | 'agent-generic' | 'chat-home';
 
@@ -51,6 +52,7 @@ interface ChatSession {
   id: string;
   title: string;
   time: string;
+  pinned?: boolean;
 }
 
 const emptyProjectForm: ProjectFormState = {
@@ -60,7 +62,7 @@ const emptyProjectForm: ProjectFormState = {
   endDate: '',
   client: '',
   manager: '符金雨',
-  department: 'huaxiaoan-test',
+  department: 'roadwise-test',
   primaryType: '',
   detailType: '',
   amount: '',
@@ -104,41 +106,42 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('wls-3');
   const [projectDetailRequestId, setProjectDetailRequestId] = useState<string | null>(null);
   const [selectedMemberName, setSelectedMemberName] = useState<string>('蔡宇豪');
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [selectedChatSessionId, setSelectedChatSessionId] = useState<string | null>(null);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => readSharedAgentSessions());
+  const [selectedChatSessionId, setSelectedChatSessionId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('roadwise.selected-chat-session.v1');
+    } catch {
+      return null;
+    }
+  });
   const [members, setMembers] = useState(() => 
     chatMembers.map(m => m.name === '蔡宇豪' ? { ...m, unreadCount: 1 } : { ...m, unreadCount: 0 })
   );
 
+  // Chat 与 Work 右侧智能体共用同一条会话；左侧历史列表也从这条共享状态生成。
+  useEffect(() => {
+    const syncSharedSession = () => {
+      setChatSessions(readSharedAgentSessions());
+    };
+    syncSharedSession();
+    return subscribeSharedAgentMessages(syncSharedSession);
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (selectedChatSessionId) localStorage.setItem('roadwise.selected-chat-session.v1', selectedChatSessionId);
+    } catch {
+      // Ignore storage failures; the in-memory selection still works.
+    }
+  }, [selectedChatSessionId]);
+
   // Digital Agents state
   const [digitalAgents, setDigitalAgents] = useState([
     {
-      id: 'agent-shebao',
-      name: '社保专项审计',
-      avatarText: '社',
-      role: '社保审计助手',
-      unreadCount: 1,
-      subItems: [
-        { id: 'sb-1', name: '数字员工会话', unreadCount: 1 },
-      ],
-      expanded: true,
-    },
-    {
-      id: 'agent-人事',
-      name: '行政人事管理',
-      avatarText: '人',
-      role: '行政人事助手',
-      unreadCount: 0,
-      subItems: [
-        { id: 'hr-1', name: '数字员工会话', unreadCount: 0 },
-      ],
-      expanded: true,
-    },
-    {
       id: 'agent-年报',
-      name: '事业单位年报审计',
+      name: '阶段规划助手',
       avatarText: '审',
-      role: '年报审计助手',
+      role: '项目成长助手',
       unreadCount: 0,
       subItems: [
         { id: 'nb-1', name: '数字员工会话', unreadCount: 0 },
@@ -147,9 +150,9 @@ export default function App() {
     },
     {
       id: 'agent-会计',
-      name: '财务助手',
+      name: '数据与风险助手',
       avatarText: '财',
-      role: '财务合规助手',
+      role: '项目分析助手',
       unreadCount: 1,
       subItems: [
         { id: 'kj-1', name: '数字员工会话', unreadCount: 1 },
@@ -192,24 +195,26 @@ export default function App() {
     setSelectedSubItemId(null);
     setSelectedChatSessionId(newSession.id);
     setChatSessions(prev => [newSession, ...prev]);
+    writeSharedAgentSessions([newSession, ...readSharedAgentSessions().filter((session) => session.id !== newSession.id)]);
   };
 
   const renameChatSession = (id: string, title: string) => {
-    setChatSessions(prev => prev.map(session => (
+    const next = chatSessions.map(session => (
       session.id === id ? { ...session, title } : session
-    )));
+    ));
+    setChatSessions(next);
+    writeSharedAgentSessions(next);
   };
 
   const pinChatSession = (id: string) => {
-    setChatSessions(prev => {
-      const target = prev.find(session => session.id === id);
-      if (!target) return prev;
-      return [target, ...prev.filter(session => session.id !== id)];
-    });
+    const next = chatSessions.map(session => session.id === id ? { ...session, pinned: true } : session);
+    setChatSessions(next);
+    writeSharedAgentSessions(next);
   };
 
   const deleteChatSession = (id: string) => {
     setChatSessions(prev => prev.filter(session => session.id !== id));
+    writeSharedAgentSessions(readSharedAgentSessions().filter(session => session.id !== id));
     setSelectedChatSessionId(prev => (prev === id ? null : prev));
   };
 
@@ -430,7 +435,7 @@ export default function App() {
       members: projectMembers,
       agents: [
         {
-          name: '华小安主控',
+          name: 'RoadwiseLab 主控',
           avatarIcon: 'Bot',
           role: '主控',
           description: payload ? '承接智能体会话并编排项目流转' : '企业智能管家',
@@ -481,7 +486,7 @@ export default function App() {
             {
               id: `seed-controller-${now}`,
               sender: {
-                name: '华小安主控',
+                name: 'RoadwiseLab 主控',
                 avatarIcon: 'Bot',
                 avatarBg: 'bg-indigo-600',
                 isAi: true,
@@ -497,7 +502,7 @@ export default function App() {
                   { id: 'seed-3', text: '3. 等待项目成员复核与补充资料', status: 'processing' },
                 ],
                 assignments: [
-                  { role: '项目主控', agentName: '华小安主控', status: 'completed' },
+                  { role: '项目主控', agentName: 'RoadwiseLab 主控', status: 'completed' },
                   { role: '底稿撰写', agentName: payload.sourceAgentName, status: 'completed' },
                   { role: '项目复核', agentName: '人工成员', status: 'processing' },
                 ],
@@ -508,7 +513,7 @@ export default function App() {
             {
               id: `msg-new-${now}`,
               sender: {
-                name: '华小安主控',
+                name: 'RoadwiseLab 主控',
                 avatarIcon: 'Bot',
                 avatarBg: 'bg-indigo-600',
                 isAi: true,
@@ -652,7 +657,7 @@ export default function App() {
         const stage1Msg: Message = {
           id: `ai-stage1-${Date.now()}`,
           sender: {
-            name: '华小安主控',
+            name: 'RoadwiseLab 主控',
             avatarIcon: 'Bot',
             avatarBg: 'bg-indigo-600',
             isAi: true,
@@ -668,7 +673,7 @@ export default function App() {
               { id: 'p-3', text: '3. 生成项目进度与风险报告', status: 'pending' },
             ],
             assignments: [
-              { role: '风险分析师', agentName: '华小安主控', status: 'completed' },
+              { role: '风险分析师', agentName: 'RoadwiseLab 主控', status: 'completed' },
               { role: '进度分析师', agentName: '报告助理', status: 'processing' },
               { role: '报告助理', agentName: '报告助理', status: 'pending' },
             ],
@@ -760,7 +765,7 @@ export default function App() {
         const stage3Msg: Message = {
           id: `ai-stage3-${Date.now()}`,
           sender: {
-            name: '华小安主控',
+            name: 'RoadwiseLab 主控',
             avatarIcon: 'Bot',
             avatarBg: 'bg-indigo-600',
             isAi: true,
@@ -779,7 +784,7 @@ export default function App() {
             };
           });
         });
-        showBanner('华小安智能体已成功为您归集数据包并刷新进度！');
+        showBanner('RoadwiseLab 智能体已成功为您归集数据包并刷新进度！');
       }, 5000);
     } else {
       // General random response from controller
@@ -787,7 +792,7 @@ export default function App() {
         const fallbackMsg: Message = {
           id: `ai-fallback-${Date.now()}`,
           sender: {
-            name: '华小安主控',
+            name: 'RoadwiseLab 主控',
             avatarIcon: 'Bot',
             avatarBg: 'bg-indigo-600',
             isAi: true,
@@ -869,7 +874,7 @@ export default function App() {
                 <span className="w-3 h-3 rounded-full bg-[#28c840]" />
               </div>
               <PanelTop className="w-4 h-4 text-gray-500" />
-              <img src={huaxiaoanLogo} alt="华小安" className="w-8 h-8 object-contain" />
+              <img src={roadwiseLogo} alt="Roadwise" className="w-8 h-8 object-contain" />
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1032,7 +1037,7 @@ export default function App() {
         onRenameChat={renameChatSession}
         onDeleteChat={deleteChatSession}
         onNewChat={createNewChatSession}
-        onNewProject={openBlankProjectForm}
+        onNewProject={createNewChatSession}
         onOpenProjectDetail={(projectId) => {
           setTab('work');
           setActiveView('workbench');
@@ -1086,6 +1091,9 @@ export default function App() {
           <ChatHomeView
             agents={digitalAgents}
             onSelectAgent={openAgent}
+            showSessionHistory={false}
+            sessionId={selectedChatSessionId || 'new-chat-session'}
+            sessionTitleOverride={chatSessions.find((session) => session.id === selectedChatSessionId)?.title || '新会话'}
           />
         )}
 

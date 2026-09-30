@@ -3,9 +3,9 @@ import { Calendar, Check, ChevronDown, ChevronLeft, Maximize2, PanelRight, Panel
 import WorkbenchView from './components/WorkbenchView';
 import { initialProjects } from './data';
 import { Project } from './types';
-import huaxiaoanLogo from './assets/huaxiaoan-logo.png?inline';
+import roadwiseLogo from './assets/roadwise-logo.png?inline';
 
-const emptyProjectForm = { name: '', code: '', client: '', startDate: '2026/06/30', endDate: '', manager: '符金雨', department: 'huaxiaoan-test', primaryType: '', detailType: '', amount: '', requiresReport: true, summary: '' };
+const emptyProjectForm = { name: '', code: '', client: '', startDate: '2026/06/30', endDate: '', manager: '符金雨', department: 'roadwise-test', primaryType: '', detailType: '', amount: '', requiresReport: true, summary: '' };
 const memberOptions = [
   ['张华轩', '张', '项目成员'], ['邱条芬', '邱', '项目成员'], ['ceshi4', 'A', '项目成员'], ['ceshi3', 'A', '项目成员'], ['ceshi2', 'A', '项目成员'], ['ceshi', '测', '项目成员'], ['蔡宇豪', '蔡', '产品经理'], ['陈华', '陈', '开发工程师'], ['陈嘉妍', '陈', '测试工程师'],
 ];
@@ -15,7 +15,7 @@ const employeeOptions = [
 ];
 
 const goHome = (suffix = '') => {
-  const homePage = window.location.protocol === 'file:' ? './华小安智能工作台完整.html' : './';
+  const homePage = window.location.protocol === 'file:' ? './RoadwiseLab智能工作台完整.html' : './';
   window.location.href = `${homePage}${suffix}`;
 };
 
@@ -97,8 +97,8 @@ export default function StandaloneWorkbenchApp() {
                 <span className="h-3 w-3 rounded-full bg-[#28c840]" />
               </div>
               <PanelTop className="h-4 w-4 text-gray-500" />
-              <img src={huaxiaoanLogo} alt="华小安" className="h-8 w-8 object-contain" />
-              <button type="button" onClick={() => goHome()} className="grid h-7 w-7 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-white/70 hover:text-gray-700" aria-label="返回华小安">
+              <img src={roadwiseLogo} alt="Roadwise" className="h-8 w-8 object-contain" />
+              <button type="button" onClick={() => goHome()} className="grid h-7 w-7 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-white/70 hover:text-gray-700" aria-label="返回 RoadwiseLab">
                 <ChevronLeft className="h-4 w-4" />
               </button>
             </div>

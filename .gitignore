@@ -3,3 +3,14 @@
 frontend-source/node_modules/
 frontend-source/dist/
 *.log
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+backend-python/.venv/
+backend-python/**/__pycache__/
+backend-python/.pytest_cache/
+backend-python/.agent-config.json

@@ -40,5 +40,5 @@ async function buildStandalone(entryName, outputName, title) {
   console.log(`Created ${target} with ${assets.length} embedded images.`);
 }
 
-await buildStandalone('index.html', '华小安智能工作台完整.html', '华小安智能工作台 - 项目负责人版');
-await buildStandalone('workbench.html', '华小安独立工作台.html', '华小安 - 全局项目工作台');
+await buildStandalone('index.html', 'RoadwiseLab智能工作台完整.html', 'RoadwiseLab 智能工作台 - 项目负责人版');
+await buildStandalone('workbench.html', 'RoadwiseLab独立工作台.html', 'RoadwiseLab - 全局项目工作台');

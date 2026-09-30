@@ -17,7 +17,7 @@ type CommunityMode = 'home' | 'user-doc';
 
 const userGuideSections = [
   {
-    title: '1. 进入华小安',
+    title: '1. 进入 RoadwiseLab',
     body: '打开平台后，左侧可在 Chat 和 Work 之间切换。Chat 用于发起会话、选择数字员工；Work 用于查看项目、待办、风险和消息。',
   },
   {
@@ -117,11 +117,11 @@ export default function UserCommunityView() {
                 </div>
                 <div>
                   <p className="text-xs font-black text-[#0052d9]">用户使用教程</p>
-                  <h1 className="mt-1 text-2xl font-black tracking-normal text-[#141824]">华小安平台基础使用文档</h1>
+                  <h1 className="mt-1 text-2xl font-black tracking-normal text-[#141824]">RoadwiseLab 平台基础使用文档</h1>
                 </div>
               </div>
               <p className="mt-4 max-w-3xl text-sm font-medium leading-7 text-gray-600">
-                本文档面向首次使用华小安的用户，帮助快速理解 Chat、Work、数字员工、工作台待办和历史会话管理。
+                本文档面向首次使用 RoadwiseLab 的用户，帮助快速理解 Chat、Work、数字员工、工作台待办和历史会话管理。
               </p>
             </div>
 

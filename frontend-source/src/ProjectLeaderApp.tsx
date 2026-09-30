@@ -18,7 +18,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import logo from './assets/huaxiaoan-logo.png';
+import logo from './assets/roadwise-logo.png';
 import './project-leader.css';
 import './project-actions.css';
 
@@ -44,7 +44,7 @@ const initial: Project[] = [
   { id: 'PJ-002', name: 'Codex-E2E-CPA-20260623', client: 'Codex有限公司', type: '年报审计', owner: '陈华', progress: 45, todo: 1, due: '2026-07-25', status: '待处理', stage: 6 },
   { id: 'PJ-003', name: 'WLS测试项目3', client: 'WLS科技有限公司', type: '财务审计', owner: '蔡宇豪', progress: 25, todo: 3, due: '2026-08-15', status: '进行中', stage: 3 },
   { id: 'PJ-004', name: 'WLS测试项目4', client: 'WLS科技有限公司', type: '社保审计', owner: '陈嘉妍', progress: 100, todo: 0, due: '2026-07-10', status: '已完成', stage: 8 },
-  { id: 'PJ-005', name: '华小安内部审计2026', client: '华小安科技', type: '内部审计', owner: '张婷婷', progress: 55, todo: 2, due: '2026-07-28', status: '待处理', stage: 5 },
+  { id: 'PJ-005', name: 'RoadwiseLab 内部审计2026', client: 'RoadwiseLab 科技', type: '内部审计', owner: '张婷婷', progress: 55, todo: 2, due: '2026-07-28', status: '待处理', stage: 5 },
 ];
 
 const tabs = ['全部项目', '我的项目', '待我处理', '即将逾期', '已完成', '归档'];
@@ -115,7 +115,7 @@ export default function ProjectLeaderApp() {
 
   return <div className="hx-app">
     <aside className="hx-side">
-      <img src={logo} alt="华小安" />
+      <img src={logo} alt="RoadwiseLab" />
       <div className="hx-mode"><button>Chat</button><button className="on">Work</button></div>
       {[['工作台', LayoutDashboard], ['项目协作', Users], ['项目日历', CalendarDays], ['我的待办', Check]].map(([name, IconValue]) => { const Icon = IconValue as typeof Bell; return <button className={name === '工作台' ? 'nav on' : 'nav'} key={String(name)}><Icon /> {String(name)}{name === '我的待办' && <b>42</b>}</button>; })}
       <div className="groups"><strong>项目分组</strong><button className="on"><FolderKanban /> 全部项目 <b>1248</b></button><button><FolderKanban /> 审计项目</button><button><FolderKanban /> 财务项目</button></div>

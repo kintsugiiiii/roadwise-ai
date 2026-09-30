@@ -308,3 +308,12 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* 评审材料和图谱说明完整展示，不因摘要样式截断内容。 */
+.line-clamp-3,
+.line-clamp-4 {
+  display: block !important;
+  overflow: visible !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: initial !important;
+}

@@ -38,7 +38,7 @@ export const WorkingPaperDetail: React.FC<WorkingPaperDetailProps> = ({
       id: '1',
       role: 'assistant',
       content:
-        '您好！我是 Orlumi 审计 AI 助手。已为您对《AP-AR-001 应收账款函证程序》完成自动化扫描。\n发现关注项：\n1. 未回函金额 200,000 元（占 1.6%），建议补充期后回款替代测试；\n2. 客户 A 回函差异 50,000 元，需追查日后回款账单。',
+        '您好！我是 RoadwiseLab 审计 AI 助手。已为您对《AP-AR-001 应收账款函证程序》完成自动化扫描。\n发现关注项：\n1. 未回函金额 200,000 元（占 1.6%），建议补充期后回款替代测试；\n2. 客户 A 回函差异 50,000 元，需追查日后回款账单。',
       timestamp: '10:30',
     },
   ]);
@@ -522,7 +522,7 @@ export const WorkingPaperDetail: React.FC<WorkingPaperDetailProps> = ({
                     <div className="flex items-center justify-between mb-1 opacity-70 text-[9px]">
                       <span className="font-bold flex items-center">
                         {msg.role === 'assistant' && <Bot className="w-3 h-3 mr-1 text-[#1890ff]" />}
-                        {msg.role === 'user' ? '提问' : 'Orlumi AI'}
+                        {msg.role === 'user' ? '提问' : 'RoadwiseLab AI'}
                       </span>
                       <span>{msg.timestamp}</span>
                     </div>

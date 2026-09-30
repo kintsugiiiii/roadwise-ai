@@ -68,7 +68,7 @@ export const TrialBalance: React.FC<TrialBalanceProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Orlumi_TB_试算平衡表_${period}.csv`);
+    link.setAttribute('download', `RoadwiseLab_TB_试算平衡表_${period}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
