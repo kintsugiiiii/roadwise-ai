@@ -1,4 +1,5 @@
 .venv/
+.venv-roadwise/
 data/*.db
 data/*.db-*
 .agent-config.json
