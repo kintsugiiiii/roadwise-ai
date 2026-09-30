@@ -107,8 +107,16 @@ export default function ReactFlowCaseLibraryGraphView({ projects, selectedProjec
       : projects[0]?.id ?? "all",
   );
   useEffect(() => {
-    if (selectedProjectId && selectedProjectId !== "all") setLocalSelection(selectedProjectId);
-  }, [selectedProjectId]);
+    if (selectedProjectId === "all") {
+      setLocalSelection("all");
+      return;
+    }
+    if (selectedProjectId && normalizedProjects.some((project) => project.id === selectedProjectId)) {
+      setLocalSelection(selectedProjectId);
+      return;
+    }
+    setLocalSelection("all");
+  }, [selectedProjectId, normalizedProjects]);
   const selection = localSelection || "all";
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -153,7 +161,7 @@ export default function ReactFlowCaseLibraryGraphView({ projects, selectedProjec
         const x = baseX + (isRight ? 800 : 500);
         const y = baseY + stageOffsets[isRight ? index - 3 : index];
         nodes.push({ id: mainId, type: "projectNode", position: { x, y }, data: { label: name, description: project.name, color: definition.colors[index], nodeId: mainId, selected: selectedNodeId === mainId && !selectedTaskId, onSelect: handleSelect } });
-        definition.tasks[index].forEach((task, taskIndex) => {
+        (definition.tasks[index] ?? []).forEach((task, taskIndex) => {
           const taskId = `${mainId}-task-${taskIndex}`;
           const taskX = isRight ? x + 280 : x - 280;
           // Use deterministic rows instead of centering around the parent node.

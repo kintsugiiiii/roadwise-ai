@@ -5005,6 +5005,7 @@ function AuditGraphWorkspace({
   const visibleProjects = caseLibraryMode ? libraryDisplayProjects : auditProjects;
   const selectedProject =
     auditProjects.find((project) => project.id === selectedProjectId) ??
+    auditProjects.find((project) => project.id === "current-project") ??
     auditProjects[0];
   const selectedTaskDecisions =
     taskDecisionsByProject[selectedProject.id] ?? {};
@@ -5613,7 +5614,7 @@ function AuditGraphWorkspace({
       </aside>
 
       {caseLibraryMode && initialWorkspaceTab === "graph" && workspaceTab === "graph" ? (
-        <ReactFlowCaseLibraryGraphView projects={graphSource === "project" ? auditProjects : libraryDisplayProjects} selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} />
+        <ReactFlowCaseLibraryGraphView projects={graphSource === "project" ? (auditProjects.length ? auditProjects : libraryDisplayProjects) : libraryDisplayProjects} selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} />
       ) : <div className="flex min-w-0 flex-1 flex-col bg-white">
         {initialWorkspaceTab === "graph" ? (
           <>
